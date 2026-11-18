@@ -280,6 +280,19 @@ pub fn SettingsPage() -> Element {
                 }
             }
 
+            if let Some(mac) = crate::mac::info() {
+                Section { title: tr("Mac-App"), description: tr("Ohne Server spielt die App deine Musik auf diesem Mac. Verbunden mit deiner Server-Instanz streamst du deren Bibliothek, Downloads und YouTube Music."),
+                    div { class: "flex flex-wrap items-center justify-between gap-3 text-sm",
+                        span { class: "min-w-0 truncate text-muted-foreground",
+                            if mac.local { {tr("Lokal auf diesem Mac – ohne Server")} } else { {trf("Verbunden mit {0}", &[&mac.server])} }
+                        }
+                        button { class: tw_merge::tw_merge!(btn(BTN_OUTLINE), BTN_SM), onclick: move |_| crate::mac::post("connect:open"),
+                            {if mac.local { tr("Mit Server verbinden …") } else { tr("Server wechseln …") }}
+                        }
+                    }
+                }
+            }
+
             Section { title: tr("Über nrzMusic"),
                 dl { class: "grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm",
                     dt { class: "text-muted-foreground", {tr("Server")} }

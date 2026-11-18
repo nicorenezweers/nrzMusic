@@ -40,6 +40,7 @@ nrzMusic is one Rust program. It serves the JSON API, the web interface (a Dioxu
 | `spotify/` | `nrzmusic-spotify` | Spotify Web API client (login with PKCE, liked songs, playlists), public playlists from the embed page, and matching of Spotify tracks to YouTube Music |
 | `ui/` | `nrzmusic-ui` | Web interface, Dioxus 0.7 → WebAssembly, components adapted from rust-ui; own Cargo project (not in the workspace) |
 | `xtask/` | `xtask` | Build tool (`cargo xtask …`, Rust): Tailwind input from `ui/src/theme.rs`, UI bundle, Dockerfile, Android app, umbrelOS package – replaces the former shell scripts and the Dockerfile |
+| `macos/` | `nrzmusic-macos` | macOS app (tao, wry/WKWebView, muda, window-vibrancy): transparent window with the system's vibrancy behind the interface (`html.nrz-glass`/`nrz-mac`, styles in `ui/src/theme.rs` `GLASS`, bridge `ui/src/mac.rs`); either shows a remote nrzMusic instance (checked via `/api/v1/health`) or runs the server in-process on `127.0.0.1` (`auth = false`, data in `~/Library/Application Support/nrzMusic`, music `~/Music/nrzMusic`). Mode in `app.json`; connect page and window script are Rust strings (`macos/src/pages.rs`). Own Cargo project (mac only); `cargo xtask macos` builds the bundle (Info.plist generated in `xtask/src/macos.rs`) and a DMG |
 | branch `android` | – | Android app (Kotlin, Gradle): WebView on the server, JS bridge `NrzAndroid`, offline library with media3/ExoPlayer; `cargo xtask android` checks it out as a worktree into `android/` and builds the APK into `static/` |
 
 ## Decisions

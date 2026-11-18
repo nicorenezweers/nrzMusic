@@ -10,6 +10,7 @@ mod components;
 mod downloads;
 mod events;
 mod i18n;
+mod mac;
 mod pages;
 mod player;
 mod share;

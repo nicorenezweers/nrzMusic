@@ -1,0 +1,49 @@
+[package]
+name = "nrzmusic-macos"
+# Gleiche Version wie das Hauptprogramm (`cargo xtask macos` prüft das).
+version = "1.1.0"
+edition = "2021"
+description = "nrzMusic als native macOS-App: durchsichtiges Fenster mit Milchglas, eingebauter Server (ohne Server-Instanz) oder Verbindung zu deiner Server-Instanz"
+license = "AGPL-3.0-or-later"
+rust-version = "1.89"
+publish = false
+
+# Eigenes Projekt (nicht im Workspace): tao/wry bauen nur auf dem Mac, die Tests des Servers
+# laufen aber auch unter Linux.
+[workspace]
+
+[[bin]]
+name = "nrzmusic-macos"
+path = "src/main.rs"
+
+[dependencies]
+# Der Server läuft im lokalen Modus im selben Prozess (Oberfläche eingebettet)
+nrzmusic = { path = ".." }
+rocket = { version = "=0.5.1", features = ["json"] }
+
+# Natives Fenster, WKWebView, Menüleiste
+tao = "0.37"
+wry = { version = "0.57", features = ["devtools"] }
+muda = "0.21"
+# Milchglas hinter der Oberfläche (NSVisualEffectView), wie bei nrzX
+window-vibrancy = "0.8"
+rfd = "0.18"
+
+# Verbindung zur Server-Instanz prüfen
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSView", "NSResponder"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

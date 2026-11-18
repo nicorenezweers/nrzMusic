@@ -8,3 +8,4 @@
 /dist*
 # Android-App: Arbeitsverzeichnis des Zweigs `android` (cargo xtask android)
 /android
+/macos/target

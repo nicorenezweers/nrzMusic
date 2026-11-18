@@ -1,6 +1,6 @@
 [package]
 name = "nrzmusic"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "nrzMusic – selbst gehosteter Musik-Client in Rust (Rocket, SQLite, Dioxus, YouTube Music)"
 license = "AGPL-3.0-or-later"
@@ -9,8 +9,9 @@ rust-version = "1.85"
 [workspace]
 # xtask: Bauwerkzeug (`cargo xtask …`), siehe xtask/src/main.rs
 members = ["types", "ytmusic", "spotify", "xtask"]
-# Die Oberfläche (Dioxus/WebAssembly) ist ein eigenes Projekt mit eigenem Profil.
-exclude = ["ui"]
+# Die Oberfläche (Dioxus/WebAssembly) und die macOS-App (tao/wry, nur auf dem Mac) sind eigene
+# Projekte mit eigenem Profil.
+exclude = ["ui", "macos"]
 
 [dependencies]
 # Gemeinsame Typen der JSON-API (auch von der Oberfläche benutzt) und YouTube Music

@@ -6,6 +6,7 @@
 //! cargo xtask ui                     Oberfläche bauen → ui/dist/public (build.rs bettet sie ein)
 //! cargo xtask serve [dx-Argumente]   Oberfläche entwickeln (dx serve, API vom laufenden Server)
 //! cargo xtask android                Android-App (Zweig `android`) bauen → static/nrzMusic.apk
+//! cargo xtask macos [--skip-ui]      macOS-App (macos/) bauen → dist-macos/nrzMusic.app + DMG
 //! cargo xtask dockerfile             Dockerfile ausgeben, z. B. `… > Dockerfile`
 //! cargo xtask docker [Argumente]     docker buildx build mit diesem Dockerfile (Kontext: Repo)
 //! cargo xtask umbrel-release <ver>   Umbrel-Paket bauen und auf den Zweig `umbrel` legen
@@ -13,6 +14,7 @@
 
 mod android;
 mod docker;
+mod macos;
 #[path = "../../ui/src/theme.rs"]
 mod theme;
 mod ui;
@@ -29,6 +31,7 @@ const USAGE: &str = "Aufruf: cargo xtask <befehl>
   ui                      Oberfläche bauen → ui/dist/public (vor dem Release-Build)
   serve [dx-Argumente]    Oberfläche entwickeln (dx serve; API vom Server auf :8350)
   android                 Android-App (Zweig android) bauen → static/nrzMusic.apk
+  macos [--skip-ui]       macOS-App bauen → dist-macos/nrzMusic.app und DMG
   dockerfile              Dockerfile ausgeben
   docker [Argumente]      docker buildx build mit diesem Dockerfile, z. B. -t nrzmusic --load
   umbrel-release <ver>    Umbrel-Paket bauen, auf den Zweig umbrel legen und pushen";
@@ -41,6 +44,7 @@ fn main() -> ExitCode {
         Some("ui") => ui::bundle(),
         Some("serve") => ui::serve(rest),
         Some("android") => android::build(),
+        Some("macos") => macos::build(rest.iter().any(|a| a == "--skip-ui")),
         Some("dockerfile") => {
             print!("{}", docker::dockerfile());
             Ok(())
@@ -48,7 +52,7 @@ fn main() -> ExitCode {
         Some("docker") => docker::build(rest),
         Some("umbrel-release") => match rest {
             [version] => umbrel::release(version),
-            _ => Err("Aufruf: cargo xtask umbrel-release <version>   (z. B. 1.8.1)".into()),
+            _ => Err("Aufruf: cargo xtask umbrel-release <version>   (z. B. 1.1.0)".into()),
         },
         Some("-h" | "--help" | "help") => {
             println!("{USAGE}");

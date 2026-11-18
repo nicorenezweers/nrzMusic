@@ -1,0 +1,113 @@
+{
+  "href": "https://api.spotify.com/v1/me/playlists?offset=0&limit=50",
+  "limit": 50,
+  "next": null,
+  "offset": 0,
+  "previous": null,
+  "total": 3,
+  "items": [
+    {
+      "collaborative": false,
+      "description": "",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/3cEYpjA9oz9GiPac4AsH4n"
+      },
+      "href": "https://api.spotify.com/v1/playlists/3cEYpjA9oz9GiPac4AsH4n",
+      "id": "3cEYpjA9oz9GiPac4AsH4n",
+      "images": [
+        {
+          "url": "https://mosaic.scdn.co/640/ab67616d0000b2731",
+          "height": null,
+          "width": null
+        }
+      ],
+      "name": "Roadtrip",
+      "owner": {
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/nico.r"
+        },
+        "href": "https://api.spotify.com/v1/users/nico.r",
+        "id": "nico.r",
+        "type": "user",
+        "uri": "spotify:user:nico.r",
+        "display_name": "Nico"
+      },
+      "public": false,
+      "snapshot_id": "AAAABfS2t9kn8Ylyk0aTvyO0f5I0Uz0p",
+      "items": {
+        "href": "https://api.spotify.com/v1/playlists/3cEYpjA9oz9GiPac4AsH4n/items",
+        "total": 5
+      },
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/3cEYpjA9oz9GiPac4AsH4n/tracks",
+        "total": 5
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:3cEYpjA9oz9GiPac4AsH4n"
+    },
+    {
+      "collaborative": true,
+      "description": null,
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/7vX3dLqZ9pXy1Lq1d3nM2k"
+      },
+      "href": "https://api.spotify.com/v1/playlists/7vX3dLqZ9pXy1Lq1d3nM2k",
+      "id": "7vX3dLqZ9pXy1Lq1d3nM2k",
+      "images": [],
+      "name": "Party (gemeinsam)",
+      "owner": {
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/friend42"
+        },
+        "href": "https://api.spotify.com/v1/users/friend42",
+        "id": "friend42",
+        "type": "user",
+        "uri": "spotify:user:friend42",
+        "display_name": null
+      },
+      "public": false,
+      "snapshot_id": "AAAAC0n2Ox1ZfzUu2Wl6eGQzUq0b3e1a",
+      "tracks": {
+        "href": "https://api.spotify.com/v1/playlists/7vX3dLqZ9pXy1Lq1d3nM2k/tracks",
+        "total": 12
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:7vX3dLqZ9pXy1Lq1d3nM2k"
+    },
+    {
+      "collaborative": false,
+      "description": "The hottest 50. Cover: Sabrina Carpenter",
+      "external_urls": {
+        "spotify": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+      },
+      "href": "https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M",
+      "id": "37i9dQZF1DXcBWIGoYBM5M",
+      "images": [
+        {
+          "url": "https://i.scdn.co/image/ab67706f00000002ca5a7517156021292e5663a6",
+          "height": null,
+          "width": null
+        }
+      ],
+      "name": "Today's Top Hits",
+      "owner": {
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/spotify"
+        },
+        "href": "https://api.spotify.com/v1/users/spotify",
+        "id": "spotify",
+        "type": "user",
+        "uri": "spotify:user:spotify",
+        "display_name": "Spotify"
+      },
+      "public": true,
+      "snapshot_id": "Z3Q3ZmQ5YjE3MDAwMDAwMDBkNmYzZjhm",
+      "items": {
+        "href": "https://api.spotify.com/v1/playlists/37i9dQZF1DXcBWIGoYBM5M/items",
+        "total": 50
+      },
+      "type": "playlist",
+      "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+/target
+/data
+/music
+.DS_Store
+*.db
+*.db-*
+/.tools
+/dist*

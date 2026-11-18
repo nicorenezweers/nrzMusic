@@ -1,0 +1,13 @@
+[package]
+name = "nrzmusic-types"
+version = "1.0.0"
+edition = "2021"
+description = "nrzMusic – gemeinsame Typen der JSON-API (Server, Oberfläche, YouTube-Music-Client)"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

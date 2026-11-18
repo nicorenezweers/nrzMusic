@@ -1,0 +1,15 @@
+target
+ui/target
+ui/dist
+ui/assets/tailwind.css
+data
+music
+.tools
+.git
+.github
+*.db
+*.db-*
+tests
+docs
+**/.DS_Store
+dist*

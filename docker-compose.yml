@@ -1,0 +1,39 @@
+# Beispiel: docker compose up -d → http://localhost:8350, dort das erste Konto anlegen (Admin).
+services:
+  nrzmusic:
+    build: .   # oder: image: <registry>/nrz-music:1.8.1
+    container_name: nrzmusic
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8350:8350"
+    environment:
+      TZ: Europe/Zurich
+      # Hinter HTTPS: sichere Cookies und Spotify-Redirect-URI auf die eigene Domain
+      # NRZMUSIC_PUBLIC_URL: "https://music.example.com"
+      # NRZMUSIC_AUTH: "false"        # Konten aus (nur im vertrauenswürdigen Netz)
+      # NRZMUSIC_YOUTUBE: "false"     # YouTube Music ganz abschalten
+      # NRZMUSIC_SCAN_INTERVAL: "60"  # Minuten zwischen vollen Scans, 0 = aus
+      # Downloads: yt-dlp, ffmpeg und Deno sind im Image. yt-dlp aktualisiert sich selbst
+      # (Kopie in /data/tools/). Verlangt YouTube eine Anmeldung, eine Cookie-Datei im
+      # Netscape-Format als /data/youtube-cookies.txt ablegen.
+      # NRZMUSIC_DOWNLOADS: "false"         # Downloads ganz abschalten
+      # NRZMUSIC_DOWNLOAD_WORKERS: "2"      # gleichzeitige Downloads
+      # Spotify: Client-ID der eigenen App von developer.spotify.com (auch in den Einstellungen
+      # einzutragen). Dort als Redirect-URI eintragen, was nrzMusic unter Spotify anzeigt –
+      # Standard http://127.0.0.1:8350/api/v1/spotify/callback. Läuft nrzMusic auf einem
+      # anderen Rechner, endet die Anmeldung auf einer Seite, die nicht lädt: deren Adresse
+      # in nrzMusic einfügen. Mit HTTPS geht auch https://<host>/api/v1/spotify/callback.
+      # NRZMUSIC_SPOTIFY_CLIENT_ID: ""
+    volumes:
+      # Datenbank (Konten, Bibliothek, Playlists, Favoriten, Verlauf, Spotify), Cover-
+      # Zwischenspeicher, yt-dlp (tools/) und die optionale youtube-cookies.txt
+      - nrzmusic-data:/data
+      # Der Ablageordner: MP3, FLAC, M4A, OGG, Opus, WAV, AIFF hier hineinlegen – nrzMusic
+      # nimmt sie automatisch auf. Uploads aus der Web-App und Downloads (YouTube/…) landen
+      # ebenfalls hier, darum muss der Ordner für UID 1000 beschreibbar sein (vorher anlegen:
+      # mkdir -p music).
+      - ./music:/music
+
+volumes:
+  nrzmusic-data:

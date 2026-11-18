@@ -1,0 +1,27 @@
+[package]
+name = "nrzmusic-spotify"
+version = "1.0.0"
+edition = "2021"
+description = "nrzMusic – Spotify-Web-API-Client (Anmeldung mit PKCE, Lieblingssongs, Playlists) und Abgleich mit YouTube Music"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[dependencies]
+nrzmusic-types = { path = "../types" }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "gzip"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+url = "2"
+sha2 = "0.10"
+# TOTP für Webplayer-Tokens (Anmeldung mit dem Cookie sp_dc)
+hmac = "0.13"
+sha1 = "0.11"
+base64 = "0.22"
+rand = "0.8"
+# Nur für die Wartezeit bei "429 Too Many Requests" (reqwest bringt tokio ohnehin mit)
+tokio = { version = "1", features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }

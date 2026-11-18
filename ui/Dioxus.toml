@@ -1,0 +1,22 @@
+[application]
+name = "nrzmusic-ui"
+default_platform = "web"
+asset_dir = "assets"
+
+[web.app]
+title = "nrzMusic"
+
+[web.resource]
+style = []
+script = []
+
+[web.resource.dev]
+style = []
+script = []
+
+# Beim Entwickeln (dx serve) gehen API, Audio, Cover und Schriften an den laufenden Rocket-Server.
+[[web.proxy]]
+backend = "http://localhost:8350/api/"
+
+[[web.proxy]]
+backend = "http://localhost:8350/static/"

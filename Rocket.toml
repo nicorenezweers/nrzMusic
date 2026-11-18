@@ -1,0 +1,35 @@
+# Standardwerte – jede Einstellung lässt sich mit NRZMUSIC_<NAME> überschreiben,
+# z. B. NRZMUSIC_PORT=9000 oder NRZMUSIC_MUSIC_DIR=/srv/musik (siehe src/config.rs).
+[default]
+address = "0.0.0.0"
+port = 8350
+ident = "nrzMusic"
+data_dir = "./data"
+music_dir = "./music"
+# Minuten zwischen zwei vollen Scans des Musikordners (zusätzlich zur Überwachung), 0 = aus
+scan_interval = 30
+# false schaltet YouTube Music ganz ab
+youtube = true
+# false schaltet Downloads mit yt-dlp ganz ab
+downloads = true
+# yt-dlp und ffmpeg (Name im PATH oder Pfad); yt-dlp wird nach <data_dir>/tools/yt-dlp kopiert
+ytdlp = "yt-dlp"
+ffmpeg = "ffmpeg"
+# Gleichzeitige Downloads
+download_workers = 2
+# Voreinstellung für die Client-ID der eigenen Spotify-App (die Einstellungen gewinnen)
+# spotify_client_id = ""
+# Konten mit Anmeldung (false = ein lokaler Nutzer ohne Anmeldung, nur hinter einem Proxy mit Login)
+auth = true
+# Öffentliche Adresse (Spotify-Redirect-URI, sichere Cookies), z. B. "https://music.zweers.ch"
+# public_url = ""
+# Uploads bis 2 GiB (ganze Alben als FLAC)
+limits = { file = "2GiB", data-form = "2GiB", form = "64KiB", json = "4MiB" }
+# Sauber beenden bei Ctrl-C und SIGTERM (docker stop)
+shutdown = { ctrlc = true, signals = ["term", "hup"], grace = 5, mercy = 5 }
+
+[debug]
+log_level = "normal"
+
+[release]
+log_level = "critical"

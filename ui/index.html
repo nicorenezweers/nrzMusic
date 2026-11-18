@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="de">
+    <head>
+        <!-- Titel setzt dx aus Dioxus.toml ([web.app] title); hier leer, sonst steht er doppelt -->
+        <title></title>
+        <meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+        <meta name="color-scheme" content="dark">
+        <meta name="theme-color" content="#121212">
+        <meta name="description" content="Deine Musik – Bibliothek, YouTube Music und Spotify an einem Ort.">
+        <!-- Webapp: zum Home-Bildschirm hinzufügen (iPhone/iPad und Android) -->
+        <link rel="manifest" href="/static/manifest.webmanifest">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-title" content="nrzMusic">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="format-detection" content="telephone=no">
+        <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+        <!-- Dunkler Hintergrund schon vor dem Laden der App (kein weisses Aufblitzen) -->
+        <style>html,body{background:#121212;color:#fafafa;margin:0}</style>
+    </head>
+    <body>
+        <div id="main"></div>
+    </body>
+</html>

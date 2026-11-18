@@ -1,0 +1,97 @@
+{
+  "href": "https://api.spotify.com/v1/playlists/3cEYpjA9oz9GiPac4AsH4n/items?offset=4&limit=4",
+  "limit": 4,
+  "next": null,
+  "offset": 4,
+  "previous": "https://api.spotify.com/v1/playlists/3cEYpjA9oz9GiPac4AsH4n/items?offset=0&limit=4",
+  "total": 5,
+  "items": [
+    {
+      "added_at": "2026-08-05T10:00:00Z",
+      "added_by": {
+        "external_urls": {
+          "spotify": "https://open.spotify.com/user/nico.r"
+        },
+        "href": "https://api.spotify.com/v1/users/nico.r",
+        "id": "nico.r",
+        "type": "user",
+        "uri": "spotify:user:nico.r"
+      },
+      "is_local": false,
+      "track": {
+        "album": {
+          "album_type": "album",
+          "total_tracks": 10,
+          "external_urls": {
+            "spotify": "https://open.spotify.com/album/2Zkd1Z9Dt0VnPZdpuX7xYV"
+          },
+          "href": "https://api.spotify.com/v1/albums/2Zkd1Z9Dt0VnPZdpuX7xYV",
+          "id": "2Zkd1Z9Dt0VnPZdpuX7xYV",
+          "images": [
+            {
+              "url": "https://i.scdn.co/image/ab67616d0000b273a1d6d5e1f9c3b2a0aa112233",
+              "height": 640,
+              "width": 640
+            },
+            {
+              "url": "https://i.scdn.co/image/ab67616d00001e02a1d6d5e1f9c3b2a0aa112233",
+              "height": 300,
+              "width": 300
+            },
+            {
+              "url": "https://i.scdn.co/image/ab67616d00004851a1d6d5e1f9c3b2a0aa112233",
+              "height": 64,
+              "width": 64
+            }
+          ],
+          "name": "Uns geht's prima...",
+          "release_date": "1981-01-01",
+          "release_date_precision": "day",
+          "type": "album",
+          "uri": "spotify:album:2Zkd1Z9Dt0VnPZdpuX7xYV",
+          "artists": [
+            {
+              "external_urls": {
+                "spotify": "https://open.spotify.com/artist/1NEx7nqtcbQ4vBQEoBjFLu"
+              },
+              "href": "https://api.spotify.com/v1/artists/1NEx7nqtcbQ4vBQEoBjFLu",
+              "id": "1NEx7nqtcbQ4vBQEoBjFLu",
+              "name": "Die Ärzte",
+              "type": "artist",
+              "uri": "spotify:artist:1NEx7nqtcbQ4vBQEoBjFLu"
+            }
+          ]
+        },
+        "artists": [
+          {
+            "external_urls": {
+              "spotify": "https://open.spotify.com/artist/1NEx7nqtcbQ4vBQEoBjFLu"
+            },
+            "href": "https://api.spotify.com/v1/artists/1NEx7nqtcbQ4vBQEoBjFLu",
+            "id": "1NEx7nqtcbQ4vBQEoBjFLu",
+            "name": "Die Ärzte",
+            "type": "artist",
+            "uri": "spotify:artist:1NEx7nqtcbQ4vBQEoBjFLu"
+          }
+        ],
+        "disc_number": 1,
+        "duration_ms": 161000,
+        "explicit": false,
+        "external_ids": {
+          "isrc": "DEA628100029"
+        },
+        "external_urls": {
+          "spotify": "https://open.spotify.com/track/6kd1wT9ytIcJ7c2CjGQ4Xa"
+        },
+        "href": "https://api.spotify.com/v1/tracks/6kd1wT9ytIcJ7c2CjGQ4Xa",
+        "id": "6kd1wT9ytIcJ7c2CjGQ4Xa",
+        "is_local": false,
+        "name": "Mädchen aus Ostberlin",
+        "preview_url": null,
+        "track_number": 3,
+        "type": "track",
+        "uri": "spotify:track:6kd1wT9ytIcJ7c2CjGQ4Xa"
+      }
+    }
+  ]
+}

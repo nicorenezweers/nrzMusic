@@ -1,0 +1,44 @@
+[package]
+name = "nrzmusic-ui"
+version = "1.0.0"
+edition = "2024"
+description = "Oberfläche von nrzMusic – Dioxus 0.7 (WebAssembly) mit Komponenten von rust-ui"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[dependencies]
+# Gemeinsame Typen der JSON-API (Vertrag mit dem Server)
+nrzmusic-types = { path = "../types" }
+
+dioxus = { version = "0.7", default-features = false, features = ["web", "router", "macro", "html", "signals", "hooks", "launch", "logger"] }
+icons = { version = "0.19", features = ["dioxus"] }
+tw_merge = "0.1"
+strum = { version = "0.28", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+gloo-net = { version = "0.6", default-features = false, features = ["http", "json"] }
+gloo-timers = { version = "0.3", features = ["futures"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+  "AddEventListenerOptions", "Blob", "BlobPropertyBag", "CssStyleDeclaration", "DataTransfer", "DataTransferItem", "DataTransferItemList",
+  "Document", "DomRect", "DomStringList", "DragEvent", "Element", "Event", "EventSource", "EventTarget", "File",
+  "FileList", "FileSystemDirectoryEntry", "FileSystemDirectoryReader", "FileSystemEntry", "FileSystemFileEntry",
+  "FormData", "HtmlAudioElement", "HtmlElement", "HtmlHeadElement", "HtmlIFrameElement", "HtmlInputElement",
+  "HtmlMediaElement", "HtmlScriptElement", "KeyboardEvent", "Location", "MediaError", "MediaQueryList", "MessageEvent", "MouseEvent",
+  "Navigator", "Node", "ProgressEvent", "Storage", "TimeRanges", "Url", "UrlSearchParams", "VisibilityState", "Window",
+  "XmlHttpRequest", "XmlHttpRequestUpload",
+] }
+urlencoding = "2"
+futures-channel = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+# Nicht strippen: neuere objcopy-Versionen entfernen die Daten, die wasm-bindgen braucht.
+# wasm-opt (dx bundle) entfernt danach ohnehin alles Unnötige.
+strip = false
+panic = "abort"

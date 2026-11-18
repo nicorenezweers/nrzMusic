@@ -1,0 +1,67 @@
+[package]
+name = "nrzmusic"
+version = "1.0.0"
+edition = "2021"
+description = "nrzMusic – selbst gehosteter Musik-Client in Rust (Rocket, SQLite, Dioxus, YouTube Music)"
+license = "AGPL-3.0-or-later"
+rust-version = "1.85"
+
+[workspace]
+members = ["types", "ytmusic", "spotify"]
+# Die Oberfläche (Dioxus/WebAssembly) ist ein eigenes Projekt mit eigenem Profil.
+exclude = ["ui"]
+
+[dependencies]
+# Gemeinsame Typen der JSON-API (auch von der Oberfläche benutzt) und YouTube Music
+nrzmusic-types = { path = "types" }
+nrzmusic-ytmusic = { path = "ytmusic" }
+nrzmusic-spotify = { path = "spotify" }
+
+# Web
+rocket = { version = "=0.5.1", features = ["json"] }
+# Rocket 0.5.1 verlangt nur "^0.5.1" für diese beiden – ohne feste Version zieht
+# Cargo 0.5.2 (hyper 1.x), und Rocket 0.5.1 lässt sich nicht mehr übersetzen.
+rocket_http = "=0.5.1"
+rocket_codegen = "=0.5.1"
+
+# Datenbank: eine SQLite-Datei (gebündelt) für Bibliothek, Playlists, Favoriten, Verlauf
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate", "json"] }
+
+# Laufzeit & Hilfen
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "sync", "time", "io-util", "process", "net"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures = { version = "0.3", default-features = false, features = ["std"] }
+sha2 = "0.10"
+# Passwörter der Konten (Argon2id)
+argon2 = "0.5"
+hex = "0.4"
+rand = "0.8"
+
+# Musikordner: überwachen, Tags lesen (MP3, FLAC, M4A, OGG, Opus, WAV), Cover verkleinern
+notify = "8"
+lofty = "0.22"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp"] }
+
+# Cover der Downloads von YouTubes Bild-Servern holen (rustls wie nrzmusic-ytmusic)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+tokio-util = { version = "0.7", features = ["io"] }
+
+[target.'cfg(unix)'.dependencies]
+# yt-dlp samt Kindprozessen (ffmpeg) beim Abbrechen beenden (Prozessgruppe)
+libc = "0.2"
+
+[build-dependencies]
+flate2 = "1"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

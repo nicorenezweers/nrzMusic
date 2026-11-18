@@ -64,9 +64,16 @@ async fn share_links_work_without_login() {
     let (s, _) = call(&anon, "GET", format!("/api/v1/public/share/{}", "0".repeat(32)), None).await;
     assert_eq!(s, Status::NotFound);
 
-    // Seite mit Vorschau
+    // Seite mit Vorschau – ohne eingebaute Oberfläche (`cargo xtask ui`) nur der Hinweis
     let res = anon.get(format!("/s/{ft}")).dispatch().await;
-    assert_eq!(res.status(), Status::Ok);
+    if nrzmusic::routes::spa::available() {
+        assert_eq!(res.status(), Status::Ok);
+        let html = res.into_string().await.unwrap();
+        assert!(html.contains("og:title"), "{html}");
+        assert!(html.contains(r#"<link rel="manifest" href="/static/manifest.webmanifest">"#), "{html}");
+    } else {
+        assert_eq!(res.status(), Status::ServiceUnavailable);
+    }
 
     // Löschen → Link ungültig
     let (s, _) = call(c, "DELETE", format!("/api/v1/shares/{ft}"), None).await;

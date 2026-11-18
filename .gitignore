@@ -6,3 +6,5 @@
 *.db-*
 /.tools
 /dist*
+# Android-App: Arbeitsverzeichnis des Zweigs `android` (cargo xtask android)
+/android

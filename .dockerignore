@@ -2,6 +2,10 @@ target
 ui/target
 ui/dist
 ui/assets/tailwind.css
+# Schreibt das Dockerfile selbst (aus ui/src/theme.rs)
+ui/tailwind.css
+# Android-App (Arbeitsverzeichnis des Zweigs android)
+android
 data
 music
 .tools

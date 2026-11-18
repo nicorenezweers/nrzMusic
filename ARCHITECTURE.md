@@ -39,7 +39,8 @@ nrzMusic is one Rust program. It serves the JSON API, the web interface (a Dioxu
 | `ytmusic/` | `nrzmusic-ytmusic` | YouTube Music client (InnerTube): search, suggestions, albums, playlists, artists, radio, home |
 | `spotify/` | `nrzmusic-spotify` | Spotify Web API client (login with PKCE, liked songs, playlists), public playlists from the embed page, and matching of Spotify tracks to YouTube Music |
 | `ui/` | `nrzmusic-ui` | Web interface, Dioxus 0.7 → WebAssembly, components adapted from rust-ui; own Cargo project (not in the workspace) |
-| `android/` | – | Android app (Kotlin, Gradle): WebView on the server, JS bridge `NrzAndroid`, offline library with media3/ExoPlayer |
+| `xtask/` | `xtask` | Build tool (`cargo xtask …`, Rust): Tailwind input from `ui/src/theme.rs`, UI bundle, Dockerfile, Android app, umbrelOS package – replaces the former shell scripts and the Dockerfile |
+| branch `android` | – | Android app (Kotlin, Gradle): WebView on the server, JS bridge `NrzAndroid`, offline library with media3/ExoPlayer; `cargo xtask android` checks it out as a worktree into `android/` and builds the APK into `static/` |
 
 ## Decisions
 
@@ -53,7 +54,9 @@ nrzMusic is one Rust program. It serves the JSON API, the web interface (a Dioxu
 | YouTube Music | Metadata through InnerTube on the server (no account, no key); playback: yt-dlp resolves the best audio-only format (M4A/AAC first, plays everywhere) over IPv4, the URL is cached until shortly before it expires, and the server passes the bytes through with `Range` | No embedded player, no ads; googlevideo URLs are bound to the server's IP, so the browser cannot fetch them itself. Fresh URLs answer 403 for a few seconds – the server retries, and the UI prepares the next queue item |
 | Downloads | Optional: **yt-dlp** as an external program (with ffmpeg, and Deno for YouTube's JavaScript challenges), a queue with workers; nrzMusic writes the tags and cover itself (lofty) from the YouTube Music metadata, then the file is scanned like any other | yt-dlp is the tool that keeps up with YouTube; it updates itself into `data/tools/` |
 | Spotify | Web API with Authorization Code + **PKCE** (no client secret), tokens in SQLite and refreshed automatically; each Spotify track is matched to YouTube Music (artist + title, duration, ISRC when it helps) and played or downloaded from there | Spotify audio can only be played through its own SDK (Premium, HTTPS); liked songs and playlists are what matters |
-| Interface | **Dioxus 0.7** (Rust → WebAssembly) with components adapted from **rust-ui**; built with `dx bundle` (`scripts/ui.sh`) and embedded by `build.rs` (gzip) | One binary, no CDN, same look as nrzPaper |
+| Interface | **Dioxus 0.7** (Rust → WebAssembly) with components adapted from **rust-ui**; built with `dx bundle` (`cargo xtask ui`) and embedded by `build.rs` (gzip). The page head for the web app (viewport, manifest, icons, dark background before load) is added by the server (`routes::spa`) to dx's default `index.html` | One binary, no CDN, same look as nrzPaper |
+| Styles | `ui/src/theme.rs`: colors, radius, font and animations as Rust data, other rules embedded; `cargo xtask css` generates the Tailwind input `ui/tailwind.css` (not in git), dx runs Tailwind over `ui/src/**/*.rs`. The toast fade-out duration is one constant shared by CSS and code | One source for every color; the stylesheet is a build artifact |
+| Tooling | `main` is Rust only: build steps in `cargo xtask` (the Dockerfile is generated and piped to `docker buildx build -f -`), migrations as Rust modules in `src/db/migrations/` (text byte-identical to the former `.sql` files, SHA-384 checksums pinned by a test) | One language for app and tooling; existing databases keep their migration history |
 | Live updates | Server-Sent Events (`/api/v1/events`); events carry an optional recipient (playlists, favorites, Spotify go only to their account) | New files show up without reloading |
 | Accounts | `users` + `sessions` in SQLite; Argon2id, 32-byte random tokens (only SHA-256 stored), 180 days rolling; cookie `nrzmusic_session` (HttpOnly, SameSite=Lax, Secure with an https `public_url`) or `Authorization: Bearer`. A request fairing (`auth::Gate`) rewrites unauthenticated `/api/v1/*` (except `health`, `auth/*`) to a 401 route; `CurrentUser`/`Admin` guards in the handlers. Playlists, favorites, history and the Spotify login carry `user_id`; library and downloads are shared. Data from before 1.2 (`user_id = 0`) goes to the first account | Defense in depth: nothing under the API is reachable without a session even if a handler forgets its guard |
 | Android | WebView loads the server; `NrzAndroid` bridge only answers on pages of the configured server; downloads with the WebView's cookie only to that server; offline playback natively (ExoPlayer in a `MediaSessionService`), web playback kept alive by a foreground service with a platform `MediaSession` | The UI stays one codebase; offline needs native storage and playback |
@@ -208,7 +211,7 @@ Admin only: `PUT /settings`, `POST /upload`, `POST /library/rescan`, `POST /down
 | `GET /settings` | → `Settings` |
 | `PUT /settings` | `Settings` → `Settings` |
 
-Everything outside `/api/` and `/static/` returns the embedded web interface (`index.html` for client-side routes).
+Everything outside `/api/` and `/static/` returns the embedded web interface (`index.html` with the web-app head for client-side routes).
 
 ## Security
 

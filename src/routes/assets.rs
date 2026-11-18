@@ -27,7 +27,7 @@ fn lookup(path: &str) -> Option<Asset> {
 impl<'r> Responder<'r, 'static> for Asset {
     fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
         let ext = self.path.rsplit('.').next().unwrap_or("");
-        // Die Android-App (scripts/android.sh legt sie als static/nrzMusic.apk ab)
+        // Die Android-App (cargo xtask android legt sie als static/nrzMusic.apk ab)
         if ext == "apk" {
             return Response::build()
                 .header(ContentType::new("application", "vnd.android.package-archive"))

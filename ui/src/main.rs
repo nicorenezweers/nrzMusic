@@ -15,6 +15,7 @@ mod player;
 mod share;
 mod spotify;
 mod state;
+mod theme;
 mod ui;
 mod upload;
 mod util;
@@ -40,6 +41,7 @@ use pages::spotify::{Spotify, SpotifyLiked, SpotifyPlaylistPage, SpotifyPlaylist
 use pages::youtube::{YouTube, YtAlbumPage, YtArtistPage, YtPlaylistPage};
 use account::AccountPage;
 
+/// Von Tailwind erzeugt – Eingabe aus theme.rs (`cargo xtask css`, auch in `cargo xtask ui/serve`).
 static CSS: Asset = asset!("/assets/tailwind.css");
 pub static ICON: Asset = asset!("/assets/icon.png");
 static FAVICON: Asset = asset!("/assets/favicon-32.png");

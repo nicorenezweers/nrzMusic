@@ -1,0 +1,3 @@
+# `cargo xtask <befehl>` – Bauwerkzeug in Rust (xtask/), ersetzt Shell-Skripte und Dockerfile.
+[alias]
+xtask = "run --package xtask --"

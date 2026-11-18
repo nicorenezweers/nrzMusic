@@ -6,6 +6,7 @@ pub mod downloads;
 pub mod favorites;
 pub mod listens;
 pub mod library;
+mod migrations;
 pub mod playable;
 pub mod playlists;
 pub mod settings;
@@ -36,10 +37,10 @@ pub async fn open(config: &Config) -> Result<SqlitePool, AppError> {
         .await?)
 }
 
-/// Schema auf den neuesten Stand bringen. Die Migrationen (`migrations/`) sind ins Programm
-/// eingebettet; sqlx merkt sich in `_sqlx_migrations`, was schon gelaufen ist.
+/// Schema auf den neuesten Stand bringen. Die Migrationen sind Rust-Module ([`migrations`]);
+/// sqlx merkt sich in `_sqlx_migrations`, was schon gelaufen ist.
 pub async fn migrate(pool: &SqlitePool) -> Result<(), AppError> {
-    sqlx::migrate!("./migrations")
+    migrations::migrator()
         .run(pool)
         .await
         .map_err(|e| AppError::Config(format!("Migration fehlgeschlagen: {e}")))

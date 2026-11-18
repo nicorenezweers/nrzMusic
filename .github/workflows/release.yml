@@ -27,6 +27,10 @@ jobs:
         with:
           ref: ${{ env.TAG }}
 
+      # The Dockerfile is generated from Rust (xtask/src/docker.rs); the runner has Rust.
+      - name: Dockerfile
+        run: cargo run --quiet --locked -p xtask -- dockerfile > Dockerfile
+
       - name: Version and image name
         id: v
         run: |

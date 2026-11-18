@@ -1,3 +1,5 @@
 target
+# Eingabe für Tailwind, erzeugt aus src/theme.rs (cargo xtask css), und die Ausgabe von Tailwind
+/tailwind.css
 assets/tailwind.css
 dist

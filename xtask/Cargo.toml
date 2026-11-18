@@ -1,0 +1,13 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+edition = "2021"
+description = "Bauwerkzeug von nrzMusic (cargo xtask …): Oberfläche, Android-App, Docker, Umbrel-Paket"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[dependencies]
+# Prüfsummen und gzip für das Umbrel-Paket (beides nutzt der Server schon)
+sha2 = "0.10"
+hex = "0.4"
+flate2 = "1"

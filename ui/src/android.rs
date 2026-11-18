@@ -1,4 +1,4 @@
-//! Brücke zur Android-App (`android/`): Die App zeigt diese Oberfläche in einer WebView und
+//! Brücke zur Android-App (Kotlin, Zweig `android`): Die App zeigt diese Oberfläche in einer WebView und
 //! stellt `window.NrzAndroid` bereit. Darüber
 //!
 //! - speichert die App Titel aufs Handy (`download`) – für die Offline-Bibliothek der App,

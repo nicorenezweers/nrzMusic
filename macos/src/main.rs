@@ -19,6 +19,7 @@ mod lights;
 mod pages;
 mod server;
 mod settings;
+mod updater;
 
 use muda::{AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use server::LocalServer;
@@ -46,6 +47,24 @@ enum UserEvent {
     PageLoad { finished: bool },
     /// Titel der Seite („Song – nrzMusic“) → Fenstertitel (Fenster-Menü, Mission Control).
     Title(String),
+    /// Ergebnis einer Update-Prüfung; `manual` = über das Menü (Ergebnis als Dialog).
+    UpdateChecked { result: Result<Option<updater::Update>, String>, manual: bool },
+    /// Fortschritt des Update-Downloads (0…1, −1 unbekannt).
+    UpdateProgress(f64),
+    /// Update geladen (Pfad der DMG) oder Fehler.
+    UpdateDownloaded(Result<std::path::PathBuf, String>),
+}
+
+/// Stand der Updates.
+#[derive(Default)]
+struct Updates {
+    /// Gefundene neuere Version.
+    found: Option<updater::Update>,
+    /// Läuft gerade ein Download?
+    downloading: bool,
+    progress: f64,
+    /// Fertig geladene DMG (zu `found`).
+    ready: Option<std::path::PathBuf>,
 }
 
 struct MenuIds {
@@ -59,6 +78,8 @@ struct MenuIds {
     forward: MenuItem,
     backward: MenuItem,
     show: MenuItem,
+    check: MenuItem,
+    install: MenuItem,
     quit: MenuItem,
 }
 
@@ -78,6 +99,9 @@ struct App {
     on_connect: bool,
     /// Das Fenster erscheint erst mit der ersten geladenen Seite (kein leeres Aufblitzen).
     shown: bool,
+    updates: Updates,
+    /// Laufzeit für Update-Prüfung und Download.
+    rt: tokio::runtime::Runtime,
 }
 
 impl App {
@@ -153,6 +177,119 @@ impl App {
         let size = size.to_logical::<f64>(scale);
         self.settings.window = Some(settings::Frame { x: pos.x, y: pos.y, w: size.width, h: size.height });
         self.settings.save();
+    }
+
+    /// Stand der Updates an die Seite (Knopf unten in der Seitenleiste).
+    fn send_update(&self) {
+        let u = &self.updates;
+        let js = match (&u.found, &u.ready, u.downloading) {
+            (Some(f), Some(_), _) => format!("window.__nrzUpdate && window.__nrzUpdate('ready', '{}')", f.version),
+            (Some(f), None, true) => format!("window.__nrzUpdate && window.__nrzUpdate('progress', '{}', {:.3})", f.version, u.progress),
+            _ => "window.__nrzUpdate && window.__nrzUpdate('none')".to_string(),
+        };
+        self.js(&js);
+    }
+
+    /// Nach Updates fragen (im Hintergrund).
+    fn check_updates(&self, manual: bool) {
+        let p = self.proxy.clone();
+        self.rt.spawn(async move {
+            let result = updater::check(&updater::current_version()).await;
+            let _ = p.send_event(UserEvent::UpdateChecked { result, manual });
+        });
+    }
+
+    fn on_update_checked(&mut self, result: Result<Option<updater::Update>, String>, manual: bool, ids: &MenuIds) {
+        match result {
+            Ok(Some(update)) => {
+                let same = self.updates.found.as_ref().is_some_and(|f| f.version == update.version);
+                if same && (self.updates.downloading || self.updates.ready.is_some()) {
+                    if manual {
+                        let what = if self.updates.ready.is_some() { "ist bereit – unten in der Seitenleiste oder im Menü „Update installieren“ klicken" } else { "wird gerade geladen" };
+                        message(&format!("nrzMusic {} {what}.", update.version));
+                    }
+                    return;
+                }
+                tracing::info!("Update gefunden: {}", update.version);
+                self.updates = Updates { found: Some(update.clone()), downloading: true, progress: 0.0, ready: None };
+                ids.install.set_enabled(false);
+                ids.install.set_text(format!("Update {} wird geladen …", update.version));
+                self.send_update();
+                // Automatisch im Hintergrund laden
+                let p = self.proxy.clone();
+                self.rt.spawn(async move {
+                    let last = std::sync::Mutex::new(std::time::Instant::now() - Duration::from_secs(1));
+                    let r = updater::download(&update, |f| {
+                        let mut l = last.lock().unwrap();
+                        if l.elapsed() > Duration::from_millis(150) {
+                            *l = std::time::Instant::now();
+                            let _ = p.send_event(UserEvent::UpdateProgress(f));
+                        }
+                    })
+                    .await;
+                    let _ = p.send_event(UserEvent::UpdateDownloaded(r));
+                });
+            }
+            Ok(None) => {
+                if manual {
+                    message(&format!("nrzMusic ist aktuell (Version {}).", updater::current_version()));
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Update-Prüfung: {e}");
+                if manual {
+                    message(&format!("Nach Updates suchen ging nicht:\n{e}"));
+                }
+            }
+        }
+    }
+
+    fn on_update_downloaded(&mut self, result: Result<std::path::PathBuf, String>, ids: &MenuIds) {
+        self.updates.downloading = false;
+        match result {
+            Ok(path) => {
+                let v = self.updates.found.as_ref().map(|f| f.version.to_string()).unwrap_or_default();
+                tracing::info!("Update {v} geladen: {}", path.display());
+                self.updates.ready = Some(path);
+                ids.install.set_text(format!("Update auf {v} installieren und neu starten"));
+                ids.install.set_enabled(true);
+            }
+            Err(e) => {
+                tracing::warn!("Update-Download: {e}");
+                // Beim nächsten Prüfen neu versuchen
+                self.updates = Updates::default();
+                ids.install.set_text("Update installieren …");
+                ids.install.set_enabled(false);
+            }
+        }
+        self.send_update();
+    }
+
+    /// Geladenes Update einsetzen und neu starten. `true`, wenn die App jetzt beenden soll.
+    fn install_update(&mut self, ids: &MenuIds) -> bool {
+        let (Some(found), Some(dmg)) = (self.updates.found.clone(), self.updates.ready.clone()) else { return false };
+        self.js(&format!("window.__nrzUpdate && window.__nrzUpdate('installing', '{}')", found.version));
+        ids.install.set_enabled(false);
+        self.save_frame();
+        match updater::install(&dmg) {
+            Ok(updater::Installed::Replaced(bundle)) => {
+                tracing::info!("Update {} installiert – Neustart", found.version);
+                self.stop_local();
+                updater::relaunch_after_exit(&bundle);
+                true
+            }
+            Ok(updater::Installed::OpenedDmg(msg)) => {
+                message(&msg);
+                false
+            }
+            Err(e) => {
+                tracing::error!("Update installieren: {e}");
+                message(&format!("Update lässt sich nicht installieren:\n{e}"));
+                ids.install.set_enabled(true);
+                self.send_update();
+                false
+            }
+        }
     }
 
     fn js(&self, js: &str) {
@@ -293,7 +430,21 @@ fn main() {
         icon,
         on_connect: false,
         shown: false,
+        updates: Updates::default(),
+        rt: tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("Tokio"),
     };
+    // Updates: kurz nach dem Start, dann alle sechs Stunden
+    {
+        let p = proxy.clone();
+        app.rt.spawn(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            loop {
+                let result = updater::check(&updater::current_version()).await;
+                let _ = p.send_event(UserEvent::UpdateChecked { result, manual: false });
+                tokio::time::sleep(updater::CHECK_INTERVAL).await;
+            }
+        });
+    }
     // Spätestens nach 2 s zeigen, auch wenn die Seite noch lädt
     {
         let p = proxy.clone();
@@ -327,7 +478,18 @@ fn main() {
             }
             Event::WindowEvent { event: WindowEvent::Resized(_), .. } => app.send_lights(),
             Event::UserEvent(ev) => match ev {
+                UserEvent::Ipc(msg) if msg == "update:install" => {
+                    if app.install_update(&ids) {
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
                 UserEvent::Ipc(msg) => app.on_ipc(&msg),
+                UserEvent::UpdateChecked { result, manual } => app.on_update_checked(result, manual, &ids),
+                UserEvent::UpdateProgress(f) => {
+                    app.updates.progress = f;
+                    app.send_update();
+                }
+                UserEvent::UpdateDownloaded(r) => app.on_update_downloaded(r, &ids),
                 UserEvent::Checked(r) => app.on_checked(r),
                 UserEvent::LocalReady(Ok(s)) => {
                     let url = s.url();
@@ -352,6 +514,7 @@ fn main() {
                     let _ = app.webview.set_background_color((0, 0, 0, 0));
                     if finished {
                         app.send_lights();
+                        app.send_update();
                         if !app.shown {
                             app.show();
                         }
@@ -388,6 +551,12 @@ fn main() {
                         app.js("window.__nrzMedia && window.__nrzMedia('forward')");
                     } else if id == ids.backward.id() {
                         app.js("window.__nrzMedia && window.__nrzMedia('backward')");
+                    } else if id == ids.check.id() {
+                        app.check_updates(true);
+                    } else if id == ids.install.id() {
+                        if app.install_update(&ids) {
+                            *control_flow = ControlFlow::Exit;
+                        }
                     } else if id == ids.quit.id() {
                         app.save_frame();
                         app.stop_local();
@@ -512,6 +681,8 @@ fn build_menu() -> (Menu, MenuIds) {
         forward: MenuItem::new("10 Sekunden vor", true, acc("CmdOrCtrl+Alt+ArrowRight")),
         backward: MenuItem::new("10 Sekunden zurück", true, acc("CmdOrCtrl+Alt+ArrowLeft")),
         show: MenuItem::new("nrzMusic", true, acc("CmdOrCtrl+Digit0")),
+        check: MenuItem::new("Nach Updates suchen …", true, None),
+        install: MenuItem::new("Update installieren …", false, None),
         quit: MenuItem::new("nrzMusic beenden", true, acc("CmdOrCtrl+Q")),
     };
     let about = AboutMetadata {
@@ -527,6 +698,8 @@ fn build_menu() -> (Menu, MenuIds) {
         true,
         &[
             &PredefinedMenuItem::about(Some("Über nrzMusic"), Some(about)),
+            &ids.check,
+            &ids.install,
             &sep(),
             &ids.settings,
             &ids.connect,

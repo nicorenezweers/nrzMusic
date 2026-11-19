@@ -70,6 +70,23 @@ html.nrz-mac :is(a, button, summary, label, [role="button"], [role="link"], [rol
 html.nrz-mac :is(input:not([type]), input[type="text"], input[type="search"], input[type="url"], input[type="email"], input[type="password"], textarea) { cursor: text !important; }
 html.nrz-mac :is(img, svg, a, video, canvas) { -webkit-user-drag: none; }
 html.nrz-mac :focus:not(:focus-visible) { outline: none !important; box-shadow: none; }
+/* Update-Knopf unten in der Seitenleiste (über der Spielerleiste), siehe `window.__nrzUpdate` */
+#nrz-update {
+  position: fixed; left: 12px; bottom: 92px; z-index: 60; width: 216px; display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 12px; border: 1px solid oklch(1 0 0 / 0.14);
+  background: oklch(0.24 0 0 / 0.72); color: oklch(0.985 0 0); font: 500 12.5px/1.3 -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-backdrop-filter: blur(24px) saturate(170%); backdrop-filter: blur(24px) saturate(170%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3); cursor: default; text-align: left; -webkit-user-select: none; user-select: none;
+  animation: nrz-up 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+#nrz-update:hover { background: oklch(0.3 0 0 / 0.78); }
+#nrz-update:disabled { opacity: 1; }
+#nrz-update .dot { width: 8px; height: 8px; border-radius: 9999px; background: oklch(0.72 0.17 145); flex: none; box-shadow: 0 0 0 3px oklch(0.72 0.17 145 / 0.25); }
+#nrz-update .txt { flex: 1; min-width: 0; }
+#nrz-update .sub { display: block; color: oklch(0.75 0 0); font-weight: 400; font-size: 11.5px; }
+#nrz-update .bar { position: absolute; left: 12px; right: 12px; bottom: 5px; height: 2px; border-radius: 2px; background: oklch(1 0 0 / 0.12); overflow: hidden; }
+#nrz-update .bar i { display: block; height: 100%; background: oklch(0.95 0 0); width: 0; transition: width 200ms; }
+@keyframes nrz-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 "#;
 
 const WINDOW_SCRIPT: &str = r#"
@@ -168,6 +185,32 @@ const WINDOW_SCRIPT: &str = r#"
   window.__nrzOpenSettings = function () {
     var a = document.querySelector('a[href="/settings"]');
     if (a) a.click(); else location.href = '/settings';
+  };
+  // Update-Knopf (die App lädt Updates selbst und meldet den Stand):
+  // state = 'progress' (text = Version, p = 0…1), 'ready' (Version), 'installing', sonst weg
+  window.__nrzUpdate = function (state, version, p) {
+    var b = document.getElementById('nrz-update');
+    if (!state || state === 'none') { if (b) b.remove(); return; }
+    if (!document.body) { document.addEventListener('DOMContentLoaded', function () { window.__nrzUpdate(state, version, p); }); return; }
+    if (!b) {
+      b = document.createElement('button'); b.id = 'nrz-update'; b.type = 'button';
+      b.innerHTML = '<span class="dot"></span><span class="txt"></span>';
+      b.addEventListener('click', function () { if (b.dataset.state === 'ready') send('update:install'); });
+      document.body.appendChild(b);
+    }
+    b.dataset.state = state;
+    var t = b.querySelector('.txt');
+    var bar = b.querySelector('.bar');
+    if (state === 'progress') {
+      t.innerHTML = 'Update ' + version + '<span class="sub">wird geladen …</span>';
+      if (!bar) { bar = document.createElement('span'); bar.className = 'bar'; bar.innerHTML = '<i></i>'; b.appendChild(bar); }
+      bar.firstChild.style.width = (p >= 0 ? Math.round(p * 100) : 30) + '%';
+      b.disabled = true; b.title = '';
+    } else {
+      if (bar) bar.remove();
+      if (state === 'installing') { t.innerHTML = 'Update ' + version + '<span class="sub">wird installiert …</span>'; b.disabled = true; }
+      else { t.innerHTML = 'Update auf ' + version + '<span class="sub">Klicken zum Neustarten</span>'; b.disabled = false; b.title = 'nrzMusic ' + version + ' installieren und neu starten'; }
+    }
   };
 })();
 "#;

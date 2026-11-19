@@ -13,4 +13,4 @@ ohne Container-Registry und ohne Login installiert werden kann. Der Quellcode li
 | `nrzMusic.apk` | Android-App (auch im Server unter /static/nrzMusic.apk) |
 | `SHA256SUMS` | Prüfsummen |
 
-Stand: nrzMusic 1.4.0, gebaut aus `75b8721` mit `cargo xtask umbrel-release 1.4.0`.
+Stand: nrzMusic 1.5.0, gebaut aus `8b4a66e` mit `cargo xtask umbrel-release 1.5.0`.

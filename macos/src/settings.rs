@@ -22,6 +22,16 @@ pub struct Settings {
     pub mode: Mode,
     /// Zuletzt verbundene Server-Instanz, z. B. `https://music.zweers.ch`.
     pub server: String,
+    /// Lage und Grösse des Fensters beim letzten Mal (logische Punkte).
+    pub window: Option<Frame>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+pub struct Frame {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
 }
 
 /// `~/Library/Application Support/nrzMusic`

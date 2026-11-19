@@ -244,37 +244,6 @@ const COMPONENTS: &str = r#"@layer components {
 }
 "#;
 
-/// macOS-App (`macos/`): Milchglas des Systems hinter dem Fenster, wie bei nrzX. Die App setzt
-/// `nrz-glass` (Flächen durchsichtig: Grund, Seitenleiste und Spielerleiste nur leicht getönt,
-/// der Schreibtisch scheint weichgezeichnet durch) und `nrz-mac` (Platz für die Ampel oben links)
-/// am `<html>`, bevor die Oberfläche zeichnet. Dialoge und Menüs bleiben fast deckend.
-const GLASS: &str = r#"html.nrz-glass {
-  --sidenav: oklch(0.2 0 0 / 22%);
-  --sidenav-border: oklch(1 0 0 / 9%);
-  --player: oklch(0.14 0 0 / 38%);
-  --card: oklch(1 0 0 / 5%);
-  --surface: oklch(1 0 0 / 6%);
-  --secondary: oklch(1 0 0 / 8%);
-  --muted: oklch(1 0 0 / 7%);
-  --accent: oklch(1 0 0 / 10%);
-  --popover: oklch(0.21 0 0 / 88%);
-  --background: oklch(0.17 0 0 / 92%);
-  --border: oklch(1 0 0 / 12%);
-}
-html.nrz-glass, html.nrz-glass body { background: transparent; }
-/* Grund des Fensters: kaum getönt */
-html.nrz-glass body { background: oklch(0.14 0 0 / 28%); }
-html.nrz-glass .bg-popover, html.nrz-glass [role="dialog"], html.nrz-glass [role="alertdialog"] {
-  -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
-}
-html.nrz-glass .bg-player { -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); }
-html.nrz-glass ::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 18%); background-clip: padding-box; }
-/* Ampel oben links: die Seitenleiste beginnt darunter, die Kopfzeile zieht das Fenster */
-html.nrz-mac aside { padding-top: 1.75rem; }
-html.nrz-mac, html.nrz-mac body { overscroll-behavior: none; }
-html.nrz-mac a, html.nrz-mac [role="link"] { cursor: default; }
-"#;
-
 /// Die Eingabe für Tailwind – Inhalt von `ui/tailwind.css` (schreibt `cargo xtask css`).
 pub fn tailwind_input() -> String {
     let mut css = String::from(
@@ -310,7 +279,7 @@ pub fn tailwind_input() -> String {
     }
     css.push_str("}\n\n");
 
-    for part in [KEYFRAMES, FONT_FACE, BASE, COMPONENTS, GLASS] {
+    for part in [KEYFRAMES, FONT_FACE, BASE, COMPONENTS] {
         css.push_str(part);
         css.push('\n');
     }

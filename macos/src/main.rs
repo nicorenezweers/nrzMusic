@@ -14,6 +14,8 @@
 //! Fenster schliessen lässt die Musik weiterlaufen (Klick aufs Dock-Symbol holt es zurück),
 //! ⌘Q beendet. Protokoll: `~/Library/Logs/nrzMusic/nrzmusic.log`.
 
+#[cfg(target_os = "macos")]
+mod lights;
 mod pages;
 mod server;
 mod settings;
@@ -26,7 +28,7 @@ use std::time::Duration;
 use tao::event::{Event, StartCause, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
 use tao::window::{Window, WindowBuilder};
-use wry::{BackgroundThrottlingPolicy, NewWindowResponse, WebView, WebViewBuilder};
+use wry::{BackgroundThrottlingPolicy, NewWindowResponse, PageLoadEvent, WebView, WebViewBuilder};
 
 const ICON_PNG: &[u8] = include_bytes!("../../static/icon.png");
 
@@ -40,11 +42,23 @@ enum UserEvent {
     LocalReady(Result<LocalServer, String>),
     /// Inhaltsprozess von WebKit beendet (Absturz, Speicherdruck) – neu laden.
     Terminated,
+    /// Eine Seite ist geladen (bzw. beginnt zu laden).
+    PageLoad { finished: bool },
+    /// Titel der Seite („Song – nrzMusic“) → Fenstertitel (Fenster-Menü, Mission Control).
+    Title(String),
 }
 
 struct MenuIds {
+    settings: MenuItem,
     connect: MenuItem,
     reload: MenuItem,
+    search: MenuItem,
+    toggle: MenuItem,
+    next: MenuItem,
+    prev: MenuItem,
+    forward: MenuItem,
+    backward: MenuItem,
+    show: MenuItem,
     quit: MenuItem,
 }
 
@@ -62,6 +76,8 @@ struct App {
     icon: String,
     /// Die Verbinden-Seite ist offen.
     on_connect: bool,
+    /// Das Fenster erscheint erst mit der ersten geladenen Seite (kein leeres Aufblitzen).
+    shown: bool,
 }
 
 impl App {
@@ -105,6 +121,42 @@ impl App {
         std::thread::spawn(move || {
             let _ = p.send_event(UserEvent::LocalReady(server::start(port)));
         });
+    }
+
+    /// Fenster zeigen (erste Seite geladen, Dock-Symbol, Menü).
+    fn show(&mut self) {
+        self.shown = true;
+        self.window.set_visible(true);
+        self.window.set_focus();
+    }
+
+    /// Lage der Ampel an die Seite (oberste Reihe richtet sich danach).
+    fn send_lights(&self) {
+        #[cfg(target_os = "macos")]
+        {
+            let js = match lights::spot(&self.window) {
+                Some((y, r)) => format!("window.__nrzLights && window.__nrzLights({y:.1}, {r:.1})"),
+                None => "window.__nrzLights && window.__nrzLights(26, 0)".to_string(),
+            };
+            let _ = self.webview.evaluate_script(&js);
+        }
+    }
+
+    /// Lage und Grösse merken (beim Schliessen und Beenden).
+    fn save_frame(&mut self) {
+        if self.window.is_maximized() || self.window.fullscreen().is_some() || !self.window.is_visible() {
+            return;
+        }
+        let scale = self.window.scale_factor();
+        let (Ok(pos), size) = (self.window.outer_position(), self.window.inner_size()) else { return };
+        let pos = pos.to_logical::<f64>(scale);
+        let size = size.to_logical::<f64>(scale);
+        self.settings.window = Some(settings::Frame { x: pos.x, y: pos.y, w: size.width, h: size.height });
+        self.settings.save();
+    }
+
+    fn js(&self, js: &str) {
+        let _ = self.webview.evaluate_script(js);
     }
 
     fn stop_local(&mut self) {
@@ -193,10 +245,15 @@ fn main() {
     }
     let (menu, ids) = build_menu();
 
+    let settings = Settings::load();
+    let frame = settings.window.filter(|f| f.w >= 820.0 && f.h >= 560.0 && on_screen(&event_loop, f));
+
     // Titelleiste in die Oberfläche integriert: transparent, Inhalt bis oben, Ampel darüber
     let builder = WindowBuilder::new()
         .with_title("nrzMusic")
-        .with_inner_size(tao::dpi::LogicalSize::new(1280.0, 820.0))
+        // Erst sichtbar, wenn die erste Seite steht
+        .with_visible(false)
+        .with_inner_size(frame.map_or(tao::dpi::LogicalSize::new(1280.0, 820.0), |f| tao::dpi::LogicalSize::new(f.w, f.h)))
         // Schmaler als 768 px zeigt die Oberfläche das Handy-Layout – in der App nie
         .with_min_inner_size(tao::dpi::LogicalSize::new(820.0, 560.0))
         .with_theme(Some(tao::window::Theme::Dark))
@@ -207,7 +264,16 @@ fn main() {
         use tao::platform::macos::WindowBuilderExtMacOS;
         builder.with_titlebar_transparent(true).with_title_hidden(true).with_fullsize_content_view(true)
     };
+    let builder = match frame {
+        Some(f) => builder.with_position(tao::dpi::LogicalPosition::new(f.x, f.y)),
+        None => builder,
+    };
     let window = builder.build(&event_loop).expect("Fenster");
+    #[cfg(target_os = "macos")]
+    lights::install(&window);
+    if frame.is_none() {
+        center(&window);
+    }
 
     let icon = format!("data:image/png;base64,{}", base64(ICON_PNG));
     let webview = build_webview(&window, &proxy, &server::local_url(local_port), &icon).expect("WebView");
@@ -220,13 +286,22 @@ fn main() {
         window,
         webview,
         proxy: proxy.clone(),
-        settings: Settings::load(),
+        settings,
         local_port,
         server: None,
         current: None,
         icon,
         on_connect: false,
+        shown: false,
     };
+    // Spätestens nach 2 s zeigen, auch wenn die Seite noch lädt
+    {
+        let p = proxy.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            let _ = p.send_event(UserEvent::PageLoad { finished: true });
+        });
+    }
     match app.settings.mode {
         Mode::Unset => app.show_connect(""),
         Mode::Local => app.go_local(),
@@ -244,12 +319,13 @@ fn main() {
                 #[cfg(target_os = "macos")]
                 menu.init_for_nsapp();
             }
-            Event::Reopen { .. } => {
-                app.window.set_visible(true);
-                app.window.set_focus();
-            }
+            Event::Reopen { .. } => app.show(),
             // Wie bei Musik-Apps üblich: Fenster schliessen, Musik läuft weiter
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => app.window.set_visible(false),
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                app.save_frame();
+                app.window.set_visible(false);
+            }
+            Event::WindowEvent { event: WindowEvent::Resized(_), .. } => app.send_lights(),
             Event::UserEvent(ev) => match ev {
                 UserEvent::Ipc(msg) => app.on_ipc(&msg),
                 UserEvent::Checked(r) => app.on_checked(r),
@@ -270,14 +346,50 @@ fn main() {
                         None => app.show_connect(""),
                     }
                 }
+                UserEvent::PageLoad { finished } => {
+                    // Durchsichtig bleiben, auch wenn WebKit für eine andere Adresse einen neuen
+                    // Inhaltsprozess startet
+                    let _ = app.webview.set_background_color((0, 0, 0, 0));
+                    if finished {
+                        app.send_lights();
+                        if !app.shown {
+                            app.show();
+                        }
+                    }
+                }
+                UserEvent::Title(t) => {
+                    let t = t.trim();
+                    app.window.set_title(if t.is_empty() { "nrzMusic" } else { t });
+                }
                 UserEvent::Menu(e) => {
-                    if e.id == ids.connect.id() {
+                    let id = &e.id;
+                    if id == ids.connect.id() {
+                        app.show();
                         app.show_connect("");
-                    } else if e.id == ids.reload.id() {
+                    } else if id == ids.settings.id() {
+                        app.show();
+                        app.js("window.__nrzOpenSettings && window.__nrzOpenSettings()");
+                    } else if id == ids.search.id() {
+                        app.show();
+                        app.js("window.__nrzFocusSearch && window.__nrzFocusSearch()");
+                    } else if id == ids.reload.id() {
                         if let Some(url) = app.current.clone() {
                             app.open(url);
                         }
-                    } else if e.id == ids.quit.id() {
+                    } else if id == ids.show.id() {
+                        app.show();
+                    } else if id == ids.toggle.id() {
+                        app.js("window.__nrzMedia && window.__nrzMedia('toggle')");
+                    } else if id == ids.next.id() {
+                        app.js("window.__nrzMedia && window.__nrzMedia('next')");
+                    } else if id == ids.prev.id() {
+                        app.js("window.__nrzMedia && window.__nrzMedia('prev')");
+                    } else if id == ids.forward.id() {
+                        app.js("window.__nrzMedia && window.__nrzMedia('forward')");
+                    } else if id == ids.backward.id() {
+                        app.js("window.__nrzMedia && window.__nrzMedia('backward')");
+                    } else if id == ids.quit.id() {
+                        app.save_frame();
                         app.stop_local();
                         *control_flow = ControlFlow::Exit;
                     }
@@ -291,12 +403,20 @@ fn main() {
 
 fn build_webview(window: &Window, proxy: &EventLoopProxy<UserEvent>, local: &str, icon: &str) -> wry::Result<WebView> {
     let p_ipc = proxy.clone();
+    let p_load = proxy.clone();
+    let p_title = proxy.clone();
     let devtools = cfg!(debug_assertions) || std::env::var("NRZMUSIC_DEVTOOLS").is_ok_and(|v| v == "1");
     let builder = WebViewBuilder::new()
         .with_initialization_script_for_main_only(pages::window_script(local), true)
         .with_transparent(true)
         .with_ipc_handler(move |req| {
             let _ = p_ipc.send_event(UserEvent::Ipc(req.body().clone()));
+        })
+        .with_on_page_load_handler(move |ev, _url| {
+            let _ = p_load.send_event(UserEvent::PageLoad { finished: matches!(ev, PageLoadEvent::Finished) });
+        })
+        .with_document_title_changed_handler(move |title| {
+            let _ = p_title.send_event(UserEvent::Title(title));
         })
         // Neue Fenster (Links mit target, window.open) gehen in den Browser des Systems
         .with_new_window_req_handler(|url, _features| {
@@ -380,10 +500,19 @@ fn content_view(window: &Window) -> Option<ContentView> {
 }
 
 fn build_menu() -> (Menu, MenuIds) {
+    let acc = |s: &str| Some(s.parse().unwrap());
     let ids = MenuIds {
-        connect: MenuItem::new("Server verbinden …", true, Some("CmdOrCtrl+Shift+K".parse().unwrap())),
-        reload: MenuItem::new("Neu laden", true, Some("CmdOrCtrl+R".parse().unwrap())),
-        quit: MenuItem::new("nrzMusic beenden", true, Some("CmdOrCtrl+Q".parse().unwrap())),
+        settings: MenuItem::new("Einstellungen …", true, acc("CmdOrCtrl+Comma")),
+        connect: MenuItem::new("Server verbinden …", true, acc("CmdOrCtrl+Shift+K")),
+        reload: MenuItem::new("Neu laden", true, acc("CmdOrCtrl+R")),
+        search: MenuItem::new("Suchen", true, acc("CmdOrCtrl+F")),
+        toggle: MenuItem::new("Abspielen/Pause", true, None),
+        next: MenuItem::new("Nächster Titel", true, acc("CmdOrCtrl+ArrowRight")),
+        prev: MenuItem::new("Vorheriger Titel", true, acc("CmdOrCtrl+ArrowLeft")),
+        forward: MenuItem::new("10 Sekunden vor", true, acc("CmdOrCtrl+Alt+ArrowRight")),
+        backward: MenuItem::new("10 Sekunden zurück", true, acc("CmdOrCtrl+Alt+ArrowLeft")),
+        show: MenuItem::new("nrzMusic", true, acc("CmdOrCtrl+Digit0")),
+        quit: MenuItem::new("nrzMusic beenden", true, acc("CmdOrCtrl+Q")),
     };
     let about = AboutMetadata {
         name: Some("nrzMusic".into()),
@@ -392,19 +521,22 @@ fn build_menu() -> (Menu, MenuIds) {
         license: Some("AGPL-3.0-or-later".into()),
         ..Default::default()
     };
+    let sep = PredefinedMenuItem::separator;
     let app = Submenu::with_items(
         "nrzMusic",
         true,
         &[
             &PredefinedMenuItem::about(Some("Über nrzMusic"), Some(about)),
-            &PredefinedMenuItem::separator(),
+            &sep(),
+            &ids.settings,
             &ids.connect,
-            &ids.reload,
-            &PredefinedMenuItem::separator(),
-            &PredefinedMenuItem::hide(None),
-            &PredefinedMenuItem::hide_others(None),
-            &PredefinedMenuItem::show_all(None),
-            &PredefinedMenuItem::separator(),
+            &sep(),
+            &PredefinedMenuItem::services(None),
+            &sep(),
+            &PredefinedMenuItem::hide(Some("nrzMusic ausblenden")),
+            &PredefinedMenuItem::hide_others(Some("Andere ausblenden")),
+            &PredefinedMenuItem::show_all(Some("Alle einblenden")),
+            &sep(),
             &ids.quit,
         ],
     )
@@ -414,30 +546,67 @@ fn build_menu() -> (Menu, MenuIds) {
         "Bearbeiten",
         true,
         &[
-            &PredefinedMenuItem::undo(None),
-            &PredefinedMenuItem::redo(None),
-            &PredefinedMenuItem::separator(),
-            &PredefinedMenuItem::cut(None),
-            &PredefinedMenuItem::copy(None),
-            &PredefinedMenuItem::paste(None),
-            &PredefinedMenuItem::select_all(None),
+            &PredefinedMenuItem::undo(Some("Widerrufen")),
+            &PredefinedMenuItem::redo(Some("Wiederholen")),
+            &sep(),
+            &PredefinedMenuItem::cut(Some("Ausschneiden")),
+            &PredefinedMenuItem::copy(Some("Kopieren")),
+            &PredefinedMenuItem::paste(Some("Einsetzen")),
+            &PredefinedMenuItem::select_all(Some("Alles auswählen")),
+            &sep(),
+            &ids.search,
         ],
+    )
+    .unwrap();
+    let view = Submenu::with_items(
+        "Darstellung",
+        true,
+        &[&ids.reload, &sep(), &PredefinedMenuItem::fullscreen(Some("Vollbild"))],
+    )
+    .unwrap();
+    let controls = Submenu::with_items(
+        "Steuerung",
+        true,
+        &[&ids.toggle, &ids.next, &ids.prev, &sep(), &ids.forward, &ids.backward],
     )
     .unwrap();
     let window = Submenu::with_items(
         "Fenster",
         true,
         &[
-            &PredefinedMenuItem::minimize(None),
-            &PredefinedMenuItem::maximize(None),
-            &PredefinedMenuItem::fullscreen(None),
-            &PredefinedMenuItem::separator(),
+            &PredefinedMenuItem::minimize(Some("Im Dock ablegen")),
+            &PredefinedMenuItem::maximize(Some("Zoomen")),
+            &sep(),
+            &ids.show,
+            &sep(),
             &PredefinedMenuItem::close_window(Some("Fenster schliessen")),
         ],
     )
     .unwrap();
-    let menu = Menu::with_items(&[&app, &edit, &window]).unwrap();
+    let menu = Menu::with_items(&[&app, &edit, &view, &controls, &window]).unwrap();
     (menu, ids)
+}
+
+/// Liegt der gemerkte Rahmen (zumindest mit der oberen linken Ecke) auf einem Bildschirm?
+fn on_screen(event_loop: &tao::event_loop::EventLoop<UserEvent>, f: &settings::Frame) -> bool {
+    event_loop.available_monitors().any(|m| {
+        let s = m.scale_factor();
+        let p = m.position().to_logical::<f64>(s);
+        let z = m.size().to_logical::<f64>(s);
+        f.x + 80.0 >= p.x && f.x + 80.0 <= p.x + z.width && f.y >= p.y - 40.0 && f.y + 40.0 <= p.y + z.height
+    })
+}
+
+/// Erstes Öffnen: mittig auf dem Hauptbildschirm (etwas über der Mitte, wie AppKit).
+fn center(window: &Window) {
+    let Some(m) = window.current_monitor() else { return };
+    let s = m.scale_factor();
+    let p = m.position().to_logical::<f64>(s);
+    let z = m.size().to_logical::<f64>(s);
+    let w = window.outer_size().to_logical::<f64>(s);
+    let x = p.x + (z.width - w.width) / 2.0;
+    let y = p.y + ((z.height - w.height) / 2.0 * 0.8).max(24.0);
+    window.set_outer_position(tao::dpi::LogicalPosition::new(x, y));
 }
 
 fn open_external(target: &str) {

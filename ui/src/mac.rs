@@ -3,8 +3,8 @@
 //!
 //! - `window.__nrzMac = { mode: "local" | "server", server: "<adresse>" }` – läuft der eingebaute
 //!   Server auf diesem Mac, oder ist die App mit einer Server-Instanz verbunden,
-//! - die Klassen `nrz-mac` (Platz für die Ampel, Fenster an der Kopfzeile ziehen) und `nrz-glass`
-//!   (durchsichtige Flächen, siehe `theme::GLASS`) am `<html>`.
+//! - die Klassen `nrz-mac` und `nrz-glass` am `<html>` samt eigenem Stil (Milchglas, Ampel,
+//!   Systemschrift – `macos/src/pages.rs`, `NATIVE_CSS`; kommt aus der App, nicht vom Server).
 //!
 //! Zurück geht es über `window.ipc.postMessage(…)`, z. B. `connect:open` (Server wechseln).
 //! Im Browser gibt es `__nrzMac` nicht – dann tut hier alles nichts.

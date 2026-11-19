@@ -1,38 +1,122 @@
 //! Was die App selbst in den WebView gibt: das Skript für jede Seite der Oberfläche und die
 //! Seiten „Verbinden“ und „Laden“ (ohne Server, auf Milchglas wie die Oberfläche).
 
-/// Vor dem ersten Zeichnen jeder Seite: `window.__nrzMac` (Modus und Server, siehe `ui/src/mac.rs`;
-/// lokal ist, was vom eingebauten Server unter `local` kommt), die Klassen `nrz-mac` und
-/// `nrz-glass` am `<html>` (Stil in `ui/src/theme.rs`, `GLASS`), das Fenster an der Kopfzeile
-/// ziehen (Doppelklick zoomt) und Links zu fremden Seiten im Browser.
+/// Vor dem ersten Zeichnen jeder Seite der Oberfläche: `window.__nrzMac` (Modus und Server, siehe
+/// `ui/src/mac.rs`; lokal ist, was vom eingebauten Server unter `local` kommt), die Klassen
+/// `nrz-mac` und `nrz-glass` am `<html>` und [`NATIVE_CSS`] – das Aussehen der App kommt so aus der
+/// App selbst und hängt nicht von der Version des Servers ab.
 pub fn window_script(local: &str) -> String {
     let local = serde_json::Value::from(local);
+    let css = serde_json::Value::from(NATIVE_CSS);
     format!(
-        "window.__nrzMac = {{ mode: location.origin === {local} ? 'local' : 'server', server: location.origin }};\n{WINDOW_SCRIPT}"
+        "window.__nrzMac = {{ mode: location.origin === {local} ? 'local' : 'server', server: location.origin }};\nwindow.__nrzMacCss = {css};\n{WINDOW_SCRIPT}"
     )
 }
+
+/// Wie eine native Mac-App: Milchglas statt deckender Flächen, Systemschrift (SF Pro), Pfeil statt
+/// Hand, kein Markieren von Bedienelementen, kein Ziehen von Bildern, kein Fokusrahmen nach
+/// Mausklicks, kein Gummiband am Fensterrand. Die oberste Reihe (Logo der Seitenleiste, Suche)
+/// steht auf der Höhe der Ampel, das Logo rechts daneben (`--nrz-tl-y`/`--nrz-tl-r` misst die App,
+/// siehe `lights`).
+pub const NATIVE_CSS: &str = r#"
+html.nrz-mac {
+  --nrz-tl-y: 26px; --nrz-tl-r: 79px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+html.nrz-glass {
+  --sidenav: oklch(0.22 0 0 / 0.26);
+  --sidenav-border: oklch(1 0 0 / 0.08);
+  --sidenav-accent: oklch(1 0 0 / 0.1);
+  --player: oklch(0.12 0 0 / 0.42);
+  --card: oklch(1 0 0 / 0.05);
+  --surface: oklch(1 0 0 / 0.06);
+  --secondary: oklch(1 0 0 / 0.08);
+  --muted: oklch(1 0 0 / 0.07);
+  --accent: oklch(1 0 0 / 0.1);
+  --popover: oklch(0.2 0 0 / 0.86);
+  --background: oklch(0.16 0 0 / 0.9);
+  --border: oklch(1 0 0 / 0.1);
+  --input: oklch(1 0 0 / 0.14);
+}
+html.nrz-glass, html.nrz-glass body, html.nrz-glass #main { background: transparent !important; }
+/* Grund des Fensters: kaum getönt – der Schreibtisch scheint weichgezeichnet durch */
+html.nrz-glass body { background: oklch(0.12 0 0 / 0.14) !important; }
+/* Anmeldung und andere ganzseitige Flächen ebenfalls auf Glas */
+html.nrz-glass .min-h-dvh.bg-background, html.nrz-glass .h-dvh.bg-background { background: transparent !important; }
+html.nrz-glass .bg-popover, html.nrz-glass [role="dialog"], html.nrz-glass [role="alertdialog"], html.nrz-glass [role="menu"] {
+  -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+}
+html.nrz-glass .bg-player { -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); }
+html.nrz-glass ::-webkit-scrollbar { width: 9px; height: 9px; }
+html.nrz-glass ::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 0.2); border: 2px solid transparent; background-clip: padding-box; border-radius: 9999px; }
+html.nrz-glass ::-webkit-scrollbar-track, html.nrz-glass ::-webkit-scrollbar-corner { background: transparent; }
+
+/* Oberste Reihe auf der Höhe der Ampel, Logo und Name rechts daneben */
+html.nrz-mac aside { padding-top: 0 !important; }
+html.nrz-mac aside > a:first-child {
+  height: calc(var(--nrz-tl-y) * 2) !important;
+  padding-left: max(1.25rem, calc(var(--nrz-tl-r) + 14px)) !important;
+  gap: 0.5rem !important;
+}
+html.nrz-mac aside > a:first-child img { width: 1.5rem; height: 1.5rem; border-radius: 0.375rem; }
+html.nrz-mac header > div:first-child { height: calc(var(--nrz-tl-y) * 2) !important; }
+html.nrz-mac header { border-bottom-color: transparent !important; }
+
+/* Bedienung wie in AppKit */
+html.nrz-mac, html.nrz-mac body { font-family: var(--font-sans) !important; overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
+html.nrz-mac body { -webkit-user-select: none; user-select: none; cursor: default; }
+html.nrz-mac :is(input, textarea, [contenteditable="true"], [contenteditable=""], pre, code, .select-text) { -webkit-user-select: text; user-select: text; }
+html.nrz-mac :is(a, button, summary, label, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], .cursor-pointer, input[type="range"], input[type="checkbox"]) { cursor: default !important; }
+html.nrz-mac :is(input:not([type]), input[type="text"], input[type="search"], input[type="url"], input[type="email"], input[type="password"], textarea) { cursor: text !important; }
+html.nrz-mac :is(img, svg, a, video, canvas) { -webkit-user-drag: none; }
+html.nrz-mac :focus:not(:focus-visible) { outline: none !important; box-shadow: none; }
+"#;
 
 const WINDOW_SCRIPT: &str = r#"
 (function () {
   if (window.__nrzMacInit) return;
   window.__nrzMacInit = true;
   function send(m) { try { window.ipc.postMessage(m); } catch (e) {} }
+  var de = document.documentElement;
+  function style() {
+    var s0 = document.getElementById('nrz-mac-css');
+    if (s0) {
+      // Immer zuletzt im <head>, damit die Regeln der App gewinnen
+      if (document.head && (s0.parentNode !== document.head || s0 !== document.head.lastElementChild)) document.head.appendChild(s0);
+      return;
+    }
+    var s = document.createElement('style'); s.id = 'nrz-mac-css'; s.textContent = window.__nrzMacCss;
+    (document.head || de).appendChild(s);
+  }
   function mark() {
-    var c = document.documentElement.classList;
+    var c = de.classList;
     if (!c.contains('nrz-mac')) c.add('nrz-mac');
     if (!c.contains('nrz-glass')) c.add('nrz-glass');
   }
   function watch() {
-    mark();
-    new MutationObserver(mark).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    mark(); style();
+    new MutationObserver(mark).observe(de, { attributes: true, attributeFilter: ['class'] });
+    var head = function () {
+      if (!document.head) return;
+      new MutationObserver(style).observe(document.head, { childList: true });
+      style();
+    };
+    if (document.head) head(); else document.addEventListener('DOMContentLoaded', head);
   }
-  if (document.documentElement) watch(); else document.addEventListener('DOMContentLoaded', watch);
+  if (de) watch(); else document.addEventListener('DOMContentLoaded', function () { de = document.documentElement; watch(); });
 
-  // Fenster ziehen: Kopfzeile und Streifen oben (Ampel), nur ausserhalb von Bedienelementen
-  var INTERACTIVE = 'button,a,input,select,textarea,label,[role=button],[role=slider],[role=menuitem],[contenteditable=true],iframe,video';
+  // Lage der Ampel (von der App gemessen); null = Vollbild ohne Ampel
+  window.__nrzLights = function (y, r) {
+    de.style.setProperty('--nrz-tl-y', (y || 26) + 'px');
+    de.style.setProperty('--nrz-tl-r', (r || 0) + 'px');
+  };
+
+  // Fenster ziehen: oberste Reihe (Höhe der Ampel), nur ausserhalb von Bedienelementen
+  var INTERACTIVE = 'button,a,input,select,textarea,label,[role=button],[role=slider],[role=menuitem],[role=tab],[contenteditable=true],iframe,video,#yt-host';
   window.addEventListener('mousedown', function (e) {
     if (e.button !== 0 || !e.target.closest || e.target.closest(INTERACTIVE)) return;
-    if (e.clientY > 56 && !e.target.closest('[data-drag]')) return;
+    var y = parseFloat(getComputedStyle(de).getPropertyValue('--nrz-tl-y')) || 26;
+    if (e.clientY > y * 2 && !e.target.closest('[data-drag]')) return;
     send(e.detail === 2 ? 'window:zoom' : 'window:drag');
   }, true);
 
@@ -47,10 +131,44 @@ const WINDOW_SCRIPT: &str = r#"
     send('open:' + u.href);
   }, true);
 
-  // Kein Kontextmenü des Browsers (ausser in Feldern), kein Gummiband
+  // Kein Kontextmenü des Browsers (ausser in Feldern)
   window.addEventListener('contextmenu', function (e) {
     if (!(e.target.closest && e.target.closest('input,textarea,[contenteditable=true]'))) e.preventDefault();
   });
+
+  // Mediensteuerung aus dem Menü „Steuerung“: die Aktionen, die die Oberfläche bei
+  // navigator.mediaSession anmeldet (dieselben wie für Medientasten und Kontrollzentrum)
+  var actions = {};
+  var ms = navigator.mediaSession;
+  if (ms && ms.setActionHandler) {
+    var orig = ms.setActionHandler.bind(ms);
+    ms.setActionHandler = function (name, fn) {
+      actions[name] = fn;
+      try { return orig(name, fn); } catch (e) {}
+    };
+  }
+  window.__nrzMedia = function (cmd) {
+    var run = function (n, d) { if (actions[n]) { actions[n](d || { action: n }); return true; } return false; };
+    if (cmd === 'toggle') {
+      var playing = ms && ms.playbackState === 'playing';
+      if (!run(playing ? 'pause' : 'play')) {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true }));
+      }
+    } else if (cmd === 'next') run('nexttrack');
+    else if (cmd === 'prev') run('previoustrack');
+    else if (cmd === 'forward') run('seekforward', { action: 'seekforward', seekOffset: 10 });
+    else if (cmd === 'backward') run('seekbackward', { action: 'seekbackward', seekOffset: 10 });
+  };
+
+  // Menü: Suchen (⌘F) und Einstellungen (⌘,)
+  window.__nrzFocusSearch = function () {
+    var i = document.querySelector('header input[type=search], header input');
+    if (i) { i.focus(); i.select(); }
+  };
+  window.__nrzOpenSettings = function () {
+    var a = document.querySelector('a[href="/settings"]');
+    if (a) a.click(); else location.href = '/settings';
+  };
 })();
 "#;
 

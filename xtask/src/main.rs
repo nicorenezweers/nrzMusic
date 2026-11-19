@@ -52,7 +52,7 @@ fn main() -> ExitCode {
         Some("docker") => docker::build(rest),
         Some("umbrel-release") => match rest {
             [version] => umbrel::release(version),
-            _ => Err("Aufruf: cargo xtask umbrel-release <version>   (z. B. 1.1.0)".into()),
+            _ => Err("Aufruf: cargo xtask umbrel-release <version>   (z. B. 1.2.0)".into()),
         },
         Some("-h" | "--help" | "help") => {
             println!("{USAGE}");

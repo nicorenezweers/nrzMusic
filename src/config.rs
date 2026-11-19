@@ -74,6 +74,11 @@ impl Config {
         self.data_dir.join("covers")
     }
 
+    /// Ganz geladene Tonspuren von YouTube-Titeln für die Wiedergabe (Zwischenspeicher).
+    pub fn stream_cache_dir(&self) -> PathBuf {
+        self.data_dir.join("cache").join("stream")
+    }
+
     /// Eigene Kopie von yt-dlp (aktualisiert sich selbst).
     pub fn tools_dir(&self) -> PathBuf {
         self.data_dir.join("tools")

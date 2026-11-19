@@ -568,8 +568,8 @@ fn upcoming(n: usize) -> Vec<QueueItem> {
 
 /// Vorladen: der nächste Titel ganz (sobald der aktuelle ein paar Sekunden läuft – sonst
 /// teilen sie sich die Leitung), der übernächste nur die Kopfdaten; im Datensparmodus nur
-/// der nächste. YouTube-Titel werden dabei einmal auf dem Server geprüft – nicht verfügbare
-/// ersetzt der Player durch eine andere Fassung oder nimmt sie aus der Warteschlange.
+/// der nächste. Die nächsten drei YouTube-Titel holt der Server vorab ganz (`prepare`) –
+/// nicht verfügbare ersetzt der Player durch eine andere Fassung oder nimmt sie heraus.
 /// Läuft bei jedem Wechsel und alle 2 s; ohne Änderung kostet es fast nichts.
 fn refresh_preload() {
     if *ACTIVE.peek() != Backend::Local {
@@ -587,7 +587,9 @@ fn refresh_preload() {
         })
         .collect();
     audio::preload(&wanted);
-    for it in next {
+    // Der Server lädt die nächsten drei YouTube-Titel ganz in seinen Zwischenspeicher – dann
+    // beginnen sie ohne Wartezeit (auch beim schnellen Weiterspringen)
+    for it in upcoming(3) {
         if let PlayableTrack::Youtube(t) = &it.track
             && crate::downloads::local_id(&t.video_id).is_none()
         {
@@ -1017,7 +1019,18 @@ fn handle(ev: Ev) {
         Ev::AudioWaiting if active == Backend::Local => {
             *BUFFERING.write() = true;
         }
-        Ev::AudioEnded if active == Backend::Local => on_ended(),
+        Ev::AudioEnded if active == Backend::Local => {
+            // Mitten im Titel "zu Ende" (Verbindung abgebrochen, WebKit hält das Ende der Daten
+            // für das Ende des Titels): an derselben Stelle weiter statt zum nächsten zu springen
+            let (pos, dur) = (*POSITION.peek(), *DURATION.peek());
+            let tries = RETRIES.with(|r| r.get());
+            if dur > 30.0 && pos > 1.0 && pos < dur - 5.0 && tries < 3 {
+                RETRIES.with(|r| r.set(tries + 1));
+                load_current(true, pos);
+            } else {
+                on_ended();
+            }
+        }
         Ev::AudioBlocked if active == Backend::Local => {
             *PLAYING.write() = false;
             *BUFFERING.write() = false;
@@ -1184,7 +1197,7 @@ async fn tick() {
             stuck = 0.0;
         } else {
             stuck += dt;
-            if stuck >= 12.0 {
+            if stuck >= 8.0 {
                 stuck = 0.0;
                 recover_stall();
                 continue;

@@ -3,7 +3,7 @@
 services:
   nrzmusic:
     # Image vorher bauen: cargo xtask docker -t nrzmusic --load (Dockerfile aus xtask/src/docker.rs)
-    image: nrzmusic   # oder: <registry>/nrz-music:1.3.0
+    image: nrzmusic   # oder: <registry>/nrz-music:1.4.0
     container_name: nrzmusic
     restart: unless-stopped
     init: true

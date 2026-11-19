@@ -6,6 +6,7 @@
 //!
 //! [`Downloads`] ist der gemeinsame Zustand (Rocket-State, billig zu klonen).
 
+pub mod audio_cache;
 pub mod stream;
 pub mod tagging;
 pub mod tool;
@@ -79,6 +80,8 @@ struct Inner {
     streams: stream::StreamCache,
     /// Client fürs Durchreichen der Tonspur (ohne Gesamt-Zeitlimit)
     stream_http: reqwest::Client,
+    /// Ganz geladene Tonspuren für die Wiedergabe (siehe `audio_cache`)
+    audio_cache: audio_cache::AudioCache,
 }
 
 impl Downloads {
@@ -114,6 +117,7 @@ impl Downloads {
                 running: Mutex::new(HashMap::new()),
                 update_lock: tokio::sync::Mutex::new(()),
                 streams: stream::StreamCache::default(),
+                audio_cache: audio_cache::AudioCache::new(config.stream_cache_dir()),
                 stream_http: reqwest::Client::builder()
                     // wie yt-dlp (--force-ipv4): die Adresse gilt nur für diese IP
                     .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED))

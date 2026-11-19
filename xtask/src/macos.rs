@@ -132,6 +132,8 @@ pub fn info_plist(version: &str) -> String {
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
   <key>NSRequiresAquaSystemAppearance</key><false/>
+  <!-- Kein App Nap: die Wiedergabe (und ihr Nachladen) läuft auch mit geschlossenem Fenster weiter -->
+  <key>NSAppSleepDisabled</key><true/>
   <key>NSAppTransportSecurity</key>
   <dict>
     <key>NSAllowsLocalNetworking</key><true/>

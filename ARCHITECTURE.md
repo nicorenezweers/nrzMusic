@@ -172,6 +172,10 @@ Admin only: `PUT /settings`, `POST /upload`, `POST /library/rescan`, `POST /down
 | `GET /yt/stream/<video_id>` | audio (`206` with `Range`): the downloaded file if there is one, else the audio track resolved by yt-dlp, passed through |
 | `POST /yt/stream/<video_id>/prepare` | → `204` once YouTube serves the track (warms the cache for the next queue item); `503` with yt-dlp's message |
 
+### YouTube playback cache
+
+`GET /yt/stream/<id>` no longer pipes YouTube's bytes live (YouTube cuts long open connections, and Safari/WebKit then stopped mid-song). `downloads::audio_cache` fetches the audio track like YouTube's own player – ranged requests of 1 MiB, then 2 MiB, each retried (with a re-resolved URL) – into `<data_dir>/cache/stream/<id>.<ext>` and serves it like a library file. A track that is still loading is served while it loads (`ytstream::Growing`: final length and `Content-Range` from the first chunk, missing bytes are awaited). The UI asks the server to prefetch the next three YouTube tracks (`POST /yt/stream/<id>/prepare`), so track changes start instantly; at most 3 fetches run at once and the cache stays below 1 GiB (least recently played first). Only if the cache fails does the old pass-through run. Only resolving a new video with yt-dlp still takes a few seconds. In the player, an `ended` event in the middle of a track and a stall of 8 s reload the track at the same position.
+
 ### Downloads (yt-dlp)
 
 `503` with `ApiError` while downloads are switched off (env or settings) or yt-dlp is missing. Downloads land in `<music>/YouTube/<Artist>/<Album or Singles>/<Title>.<ext>`.

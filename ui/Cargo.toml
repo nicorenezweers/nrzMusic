@@ -1,6 +1,6 @@
 [package]
 name = "nrzmusic-ui"
-version = "1.4.0"
+version = "1.5.0"
 edition = "2024"
 description = "Oberfläche von nrzMusic – Dioxus 0.7 (WebAssembly) mit Komponenten von rust-ui"
 license = "AGPL-3.0-or-later"

@@ -89,7 +89,16 @@ thread_local! {
     static FEED_LOADING: Cell<bool> = const { Cell::new(false) };
     /// Browser hat play() abgelehnt (z. B. im Hintergrund) – beim Zurückkommen weiterspielen
     static RESUME_ON_VISIBLE: Cell<bool> = const { Cell::new(false) };
+    /// Nächster Wechsel blendet über (Sekunden) – gesetzt vom automatischen Übergang am Ende
+    static CROSS_NEXT: Cell<Option<f64>> = const { Cell::new(None) };
+    /// Eintrag, für den das Überblenden schon begonnen hat
+    static CROSSED: Cell<Option<u64>> = const { Cell::new(None) };
+    /// Fortsetzung (Radio/„Für dich“) wird schon vorab geholt
+    static ENDLESS_LOADING: Cell<bool> = const { Cell::new(false) };
 }
+
+/// Überblenden am Ende eines Titels: so viele Sekunden aus- und einblenden.
+pub const CROSSFADE_SECS: f64 = 5.0;
 
 /// Eine Wiedergabe: welcher Eintrag, wie lange wirklich gehört.
 struct Session {
@@ -508,7 +517,13 @@ fn load_current(autoplay: bool, start: f64) {
     LISTENED.with(|l| l.set((0.0, false)));
     *ACTIVE.write() = Backend::Local;
     let uid = current_uid().unwrap_or(0);
-    audio::load(uid, &stream_url(&track), start, autoplay, same);
+    // Automatischer Wechsel am Ende: überblenden; von Hand: kurz blenden; neu laden: hart
+    let transition = match CROSS_NEXT.with(|c| c.take()) {
+        _ if same => audio::Transition::Cut,
+        Some(secs) => audio::Transition::Cross(secs),
+        None => audio::Transition::Quick,
+    };
+    audio::load(uid, &stream_url(&track), start, autoplay, same, transition);
     if !same {
         audio::keep_previous(back_ms);
     }
@@ -818,6 +833,89 @@ fn on_ended() {
     advance(true);
 }
 
+/// Gibt es nach dem aktuellen Eintrag sofort einen nächsten (ohne erst nachzuladen)?
+fn has_next() -> bool {
+    let len = QUEUE.peek().len();
+    match *INDEX.peek() {
+        Some(i) => i + 1 < len || (*REPEAT.peek() == Repeat::All && len > 0),
+        None => false,
+    }
+}
+
+/// Die letzten Sekunden: den nächsten Titel schon starten und überblenden – wie ein Radio,
+/// ohne Pause dazwischen. Nur bei Titeln mit genug Länge und wenn ein nächster bereitsteht
+/// (sonst endet der Titel normal und der Player holt die Fortsetzung).
+fn maybe_crossfade() {
+    let (pos, dur) = (*POSITION.peek(), *DURATION.peek());
+    if dur < 20.0 || pos < dur - CROSSFADE_SECS || pos >= dur - 0.3 {
+        return;
+    }
+    if *REPEAT.peek() == Repeat::One || !has_next() || !audio::can_fade() {
+        return;
+    }
+    let uid = current_uid();
+    if uid.is_none() || CROSSED.with(|c| c.get()) == uid {
+        return;
+    }
+    CROSSED.with(|c| c.set(uid));
+    CROSS_NEXT.with(|c| c.set(Some((dur - pos).clamp(1.0, CROSSFADE_SECS))));
+    finish_session(true);
+    advance(true);
+}
+
+/// Endlos weiterspielen: kurz vor dem Ende der Warteschlange die Fortsetzung (YouTube-Radio
+/// zum letzten Titel bzw. „Für dich“) schon anhängen – dann kann der Übergang überblenden,
+/// statt am Ende zu warten.
+fn ensure_upcoming() {
+    if !*AUTOPLAY_RADIO.peek() || *REPEAT.peek() == Repeat::All || *FEED_MODE.peek() || has_next() {
+        return;
+    }
+    let (pos, dur) = (*POSITION.peek(), *DURATION.peek());
+    if dur <= 0.0 || dur - pos > 45.0 || ENDLESS_LOADING.with(|l| l.get()) {
+        return;
+    }
+    let cur = current_peek();
+    let uid = current_uid();
+    ENDLESS_LOADING.with(|l| l.set(true));
+    spawn_forever(async move {
+        let (more, via_feed) = fetch_continuation(&cur).await;
+        ENDLESS_LOADING.with(|l| l.set(false));
+        if current_uid() != uid || more.is_empty() || has_next() {
+            return;
+        }
+        let new = items(more);
+        if let Some(orig) = ORIGINAL.write().as_mut() {
+            orig.extend(new.iter().map(|i| i.uid));
+        }
+        QUEUE.write().extend(new);
+        if via_feed {
+            *FEED_MODE.write() = true;
+        }
+        refresh_preload();
+    });
+}
+
+/// Fortsetzung am Ende: YouTube-Radio zum Titel (ausser im Feed-Modus), sonst „Für dich“,
+/// und wenn das nichts bringt, das andere. `true` = aus dem Feed.
+async fn fetch_continuation(cur: &Option<PlayableTrack>) -> (Vec<PlayableTrack>, bool) {
+    if !*FEED_MODE.peek()
+        && let Some(PlayableTrack::Youtube(t)) = cur
+    {
+        let more = fetch_radio(&t.video_id).await;
+        if !more.is_empty() {
+            return (more, false);
+        }
+    }
+    let mut more = fetch_feed(15).await;
+    if !more.is_empty() {
+        return (more, true);
+    }
+    if let Some(PlayableTrack::Youtube(t)) = cur {
+        more = fetch_radio(&t.video_id).await;
+    }
+    (more, false)
+}
+
 // ------------------------------------------------------------------ YouTube-Radio
 
 async fn fetch_radio(video_id: &str) -> Vec<PlayableTrack> {
@@ -877,23 +975,7 @@ fn continue_endless() {
     let uid = current_uid();
     *BUFFERING.write() = true;
     spawn_forever(async move {
-        let mut more = Vec::new();
-        let mut via_feed = false;
-        if !*FEED_MODE.peek()
-            && let Some(PlayableTrack::Youtube(t)) = &cur
-        {
-            more = fetch_radio(&t.video_id).await;
-        }
-        if more.is_empty() {
-            more = fetch_feed(15).await;
-            via_feed = true;
-        }
-        if more.is_empty()
-            && let Some(PlayableTrack::Youtube(t)) = &cur
-        {
-            more = fetch_radio(&t.video_id).await;
-            via_feed = false;
-        }
+        let (more, via_feed) = fetch_continuation(&cur).await;
         // Inzwischen etwas anderes gewählt: nichts anhängen
         if current_uid() != uid {
             return;
@@ -1206,6 +1288,7 @@ async fn tick() {
         if *BUFFERING.peek() {
             continue;
         }
+        maybe_crossfade();
         SESSION.with(|s| {
             if let Some(s) = s.borrow_mut().as_mut() {
                 s.heard += dt;
@@ -1232,6 +1315,7 @@ async fn tick() {
             }
         LISTENED.with(|l| l.set((heard, counted)));
         if n.is_multiple_of(8) {
+            ensure_upcoming();
             refresh_preload();
             persist::save_position();
             media_session::set_position(*POSITION.peek(), dur);

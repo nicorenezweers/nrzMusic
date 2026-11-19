@@ -1,4 +1,11 @@
-//! Tonspuren von YouTube-Titeln als ganze Datei auf dem Server (`<data_dir>/cache/stream/`).
+//! Tonspuren von YouTube-Titeln als ganze Datei auf dem Server (`<data_dir>/cache/audio/`).
+//!
+//! YouTubes Tonspuren sind fragmentierte MP4 (DASH). WebKit (Safari, macOS-App, iPhone) liest
+//! deren Länge falsch – oft doppelt so lang – und spielt nach dem echten Ende stumm weiter: das
+//! letzte Stück eines Titels blieb still, der nächste kam erst viel später. Darum verpackt der
+//! Server jede Tonspur nach dem Laden mit ffmpeg ohne Neukodieren in eine normale M4A
+//! (`-c copy -movflags +faststart`). Solange das nicht fertig ist, bekommt der Player nichts
+//! von der Rohdatei (ausser ohne ffmpeg).
 //!
 //! Früher reichte der Server die Bytes von YouTube live an den Player durch. YouTube bricht
 //! lange, offene Verbindungen aber gern ab (Drosselung) – Safari/WebKit (macOS-App, iPhone) hört
@@ -86,10 +93,14 @@ pub struct AudioCache {
 
 impl AudioCache {
     pub fn new(dir: PathBuf) -> Self {
+        // Zwischenspeicher von 1.4.0 (Rohdateien, die WebKit falsch liest) weg
+        if let Some(old) = dir.parent().map(|p| p.join("stream")) {
+            let _ = std::fs::remove_dir_all(old);
+        }
         // Reste abgebrochener Downloads wegräumen
         if let Ok(entries) = std::fs::read_dir(&dir) {
             for e in entries.flatten() {
-                if e.path().extension().is_some_and(|x| x == "part") {
+                if e.path().extension().is_some_and(|x| x == "part" || x == "remux") {
                     let _ = std::fs::remove_file(e.path());
                 }
             }
@@ -120,7 +131,7 @@ impl AudioCache {
         let Ok(entries) = std::fs::read_dir(&self.dir) else { return };
         let mut files: Vec<(SystemTime, u64, PathBuf)> = entries
             .flatten()
-            .filter(|e| e.path().extension().is_some_and(|x| x != "part"))
+            .filter(|e| e.path().extension().is_some_and(|x| x != "part" && x != "remux"))
             .filter_map(|e| {
                 let m = e.metadata().ok()?;
                 Some((m.modified().unwrap_or(SystemTime::UNIX_EPOCH), m.len(), e.path()))
@@ -193,6 +204,7 @@ impl Downloads {
         if let Some(c) = self.inner.audio_cache.lookup(video_id) {
             return Ok(Source::Done(c));
         }
+        let remux = self.inner.tools.read().unwrap().ffmpeg.is_some();
         let inflight = self.start_fetch(video_id);
         let mut fill = inflight.fill();
         let mut result = inflight.result.subscribe();
@@ -205,8 +217,9 @@ impl Downloads {
                 if f.failed {
                     return Err("Laden fehlgeschlagen".to_string());
                 }
+                // Während des Ladens nur ohne ffmpeg (sonst kommt gleich die umverpackte Datei)
                 if let Some(total) = f.total {
-                    if f.have > 0 {
+                    if f.have > 0 && !remux {
                         return Ok(Source::Growing(inflight.clone(), total));
                     }
                 }
@@ -271,7 +284,14 @@ impl Downloads {
         match result {
             Ok(content_type) => {
                 let path = dir.join(format!("{video_id}.{}", ext_for(content_type)));
-                tokio::fs::rename(&part, &path).await?;
+                if content_type == "audio/mp4" {
+                    self.remux(&part, &path).await;
+                }
+                if !path.is_file() {
+                    tokio::fs::rename(&part, &path).await?;
+                } else {
+                    let _ = tokio::fs::remove_file(&part).await;
+                }
                 Ok(CachedAudio { path, content_type })
             }
             Err(e) => {
@@ -279,6 +299,33 @@ impl Downloads {
                 Err(e)
             }
         }
+    }
+
+    /// Fragmentierte MP4 (DASH) ohne Neukodieren in eine normale M4A umpacken. Schlägt das fehl
+    /// (oder fehlt ffmpeg), bleibt die Rohdatei.
+    async fn remux(&self, part: &std::path::Path, target: &std::path::Path) {
+        let Some(ffmpeg) = self.inner.tools.read().unwrap().ffmpeg.clone() else { return };
+        let tmp = target.with_extension("remux");
+        let mut cmd = tokio::process::Command::new(&ffmpeg);
+        cmd.args(["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i"])
+            .arg(part)
+            .args(["-map", "0:a:0", "-c", "copy", "-movflags", "+faststart", "-f", "mp4"])
+            .arg(&tmp)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true);
+        match tokio::time::timeout(Duration::from_secs(60), cmd.output()).await {
+            Ok(Ok(out)) if out.status.success() => {
+                if let Err(e) = tokio::fs::rename(&tmp, target).await {
+                    tracing::warn!("Umpacken: {e}");
+                }
+            }
+            Ok(Ok(out)) => tracing::warn!("Umpacken fehlgeschlagen: {}", String::from_utf8_lossy(&out.stderr).trim()),
+            Ok(Err(e)) => tracing::warn!("ffmpeg startet nicht: {e}"),
+            Err(_) => tracing::warn!("Umpacken dauert zu lange"),
+        }
+        let _ = tokio::fs::remove_file(&tmp).await;
     }
 
     async fn fetch_into(&self, video_id: &str, job: &Inflight) -> AppResult<&'static str> {

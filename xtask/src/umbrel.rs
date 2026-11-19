@@ -1,4 +1,4 @@
-//! Umbrel-Paket ohne Registry und ohne Login (wie nrzMedia): `cargo xtask umbrel-release 1.4.0`
+//! Umbrel-Paket ohne Registry und ohne Login (wie nrzMedia): `cargo xtask umbrel-release 1.5.0`
 //!
 //! Baut das Programm für linux/amd64 und linux/arm64 (Stufe `dist` des Dockerfiles, mit
 //! eingebetteter Oberfläche und Android-App aus static/), holt ein statisches ffmpeg/ffprobe

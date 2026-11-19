@@ -76,7 +76,7 @@ impl Config {
 
     /// Ganz geladene Tonspuren von YouTube-Titeln für die Wiedergabe (Zwischenspeicher).
     pub fn stream_cache_dir(&self) -> PathBuf {
-        self.data_dir.join("cache").join("stream")
+        self.data_dir.join("cache").join("audio")
     }
 
     /// Eigene Kopie von yt-dlp (aktualisiert sich selbst).

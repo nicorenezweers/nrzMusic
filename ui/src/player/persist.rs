@@ -75,7 +75,7 @@ pub fn restore() {
                 PlayableTrack::Local(lt) => {
                     *ACTIVE.write() = Backend::Local;
                     let uid = crate::player::current_uid().unwrap_or(0);
-                    audio::load(uid, &format!("/api/v1/tracks/{}/stream", lt.id), pos, false, false);
+                    audio::load(uid, &format!("/api/v1/tracks/{}/stream", lt.id), pos, false, false, audio::Transition::Cut);
                 }
                 // YouTube erst beim Abspielen laden (sonst startet yt-dlp schon beim Öffnen)
                 PlayableTrack::Youtube(_) => *ACTIVE.write() = Backend::None,

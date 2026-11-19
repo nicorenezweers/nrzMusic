@@ -1,5 +1,7 @@
-//! Startseite: Begrüssung nach Tageszeit, Reihen "Zuletzt hinzugefügt", "Zuletzt gehört",
-//! "Meistgespielt", "Entdecken". Leere Bibliothek → grosse Ablagefläche mit Erklärung.
+//! Startseite: Begrüssung nach Tageszeit, oben „Dein Mix“ (Titel aus „Für dich“ abwechselnd
+//! mit deinen Favoriten – Abspielen läuft endlos weiter), dann „Zuletzt hinzugefügt“,
+//! „Meistgespielt“, „Entdecken“. Was zuletzt lief, steht im Verlauf, nicht hier.
+//! Leere Bibliothek → grosse Ablagefläche mit Erklärung.
 
 use crate::api;
 use crate::components::cards::*;
@@ -11,7 +13,7 @@ use crate::pages::library::UploadButtons;
 use crate::state::{self, HISTORY_VERSION, LIBRARY_VERSION, STATUS};
 use crate::{Route, util};
 use dioxus::prelude::*;
-use nrzmusic_types::{HomeData, PlayableTrack};
+use nrzmusic_types::{FeedPage, FeedRequest, HomeData, PlayableTrack};
 
 #[component]
 pub fn Home() -> Element {
@@ -22,6 +24,7 @@ pub fn Home() -> Element {
     rsx! {
         div { class: "flex flex-col gap-9",
             h1 { class: "text-2xl font-bold tracking-tight md:text-3xl", {util::greeting()} }
+            MixShelf {}
             match &*data.read() {
                 None => rsx! { Loading {} },
                 Some(Err(e)) => rsx! { LoadError { message: e.to_string() } },
@@ -34,7 +37,6 @@ pub fn Home() -> Element {
 #[component]
 fn HomeContent(data: HomeData) -> Element {
     let empty = data.recently_added.is_empty() && data.most_played.is_empty() && data.random_albums.is_empty();
-    let played = data.recently_played.clone();
     let most: Vec<PlayableTrack> = data.most_played.iter().cloned().map(PlayableTrack::Local).collect();
     let counts: Vec<String> = data.most_played.iter().map(|t| trf("{0}× gespielt", &[&t.play_count])).collect();
     rsx! {
@@ -46,14 +48,6 @@ fn HomeContent(data: HomeData) -> Element {
                 action: rsx! { Link { class: "text-sm text-muted-foreground hover:text-foreground", to: Route::Albums {}, {tr("Alle Alben")} } },
                 for a in data.recently_added.iter().cloned() {
                     AlbumCard { key: "{a.id}", album: a, class: SHELF_ITEM }
-                }
-            }
-        }
-        if !played.is_empty() {
-            Shelf { title: tr("Zuletzt gehört"),
-                action: rsx! { Link { class: "text-sm text-muted-foreground hover:text-foreground", to: Route::History {}, {tr("Verlauf")} } },
-                for (i , t) in played.iter().enumerate() {
-                    TrackCard { key: "{t.key()}", list: played.clone(), index: i, class: SHELF_ITEM }
                 }
             }
         }
@@ -113,6 +107,85 @@ pub fn NotFound(segments: Vec<String>) -> Element {
     rsx! {
         EmptyState { title: tr("Seite nicht gefunden"), description: tr("Diese Adresse gibt es nicht (mehr)."), icon: rsx! { icons::Compass {} },
             Link { class: btn(BTN_OUTLINE), to: Route::Home {}, {tr("Zur Startseite")} }
+        }
+    }
+}
+
+/// „Dein Mix“: „Für dich“ und Favoriten abwechselnd, die Favoriten zufällig ausgewählt.
+async fn load_mix() -> Vec<PlayableTrack> {
+    let (feed, favs) = futures_util::future::join(
+        api::post::<FeedPage, _>("/feed", &FeedRequest { exclude: Vec::new(), count: Some(16) }),
+        api::get::<Vec<PlayableTrack>>("/favorites"),
+    )
+    .await;
+    let feed: Vec<PlayableTrack> = feed.map(|p| p.items.into_iter().map(|i| i.track).collect()).unwrap_or_default();
+    let mut favs = favs.unwrap_or_default();
+    // Zufällig mischen (Fisher-Yates)
+    for i in (1..favs.len()).rev() {
+        let j = (js_sys::Math::random() * (i + 1) as f64) as usize;
+        favs.swap(i, j.min(i));
+    }
+    mix(feed, favs, 24)
+}
+
+/// Abwechselnd aus beiden Listen, ohne doppelte Titel, höchstens `max`.
+fn mix(a: Vec<PlayableTrack>, b: Vec<PlayableTrack>, max: usize) -> Vec<PlayableTrack> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    let (mut a, mut b) = (a.into_iter(), b.into_iter());
+    loop {
+        let (x, y) = (a.next(), b.next());
+        if x.is_none() && y.is_none() {
+            break;
+        }
+        for t in [x, y].into_iter().flatten() {
+            if out.len() < max && seen.insert(t.key()) {
+                out.push(t);
+            }
+        }
+        if out.len() >= max {
+            break;
+        }
+    }
+    out
+}
+
+#[component]
+fn MixShelf() -> Element {
+    let mut mix = use_resource(move || async move {
+        let _ = crate::state::FAVORITES_VERSION();
+        load_mix().await
+    });
+    let list = mix.read().clone().unwrap_or_default();
+    if mix.read().is_some() && list.is_empty() {
+        return rsx! {};
+    }
+    let play = list.clone();
+    rsx! {
+        section { class: "min-w-0",
+            div { class: "mb-3 flex flex-wrap items-end justify-between gap-3",
+                div {
+                    h2 { class: "text-lg font-semibold tracking-tight", {tr("Dein Mix")} }
+                    p { class: "text-sm text-muted-foreground", {tr("Für dich und deine Favoriten – läuft endlos weiter.")} }
+                }
+                div { class: "flex items-center gap-2",
+                    button { class: "{btn(BTN_PRIMARY)} rounded-full", disabled: list.is_empty(), onclick: move |_| crate::player::play_feed(play.clone(), 0),
+                        icons::Play { class: "size-4 fill-current" } {tr("Abspielen")}
+                    }
+                    button { class: "{btn(BTN_GHOST)} rounded-full", title: tr("Neu mischen"), onclick: move |_| mix.restart(),
+                        icons::Shuffle { class: "size-4" }
+                    }
+                }
+            }
+            if list.is_empty() {
+                Loading {}
+            } else {
+                div { class: "shelf -mx-4 flex gap-3 overflow-x-auto px-4 pb-2 md:-mx-6 md:gap-4 md:px-6",
+                    for (i , t) in list.iter().enumerate() {
+                        TrackCard { key: "{t.key()}", list: list.clone(), index: i, class: SHELF_ITEM }
+                    }
+                }
+            }
         }
     }
 }

@@ -6,6 +6,12 @@
 //! Nur das aktive Element meldet Ereignisse an den Player; ein vorladendes meldet nur Fehler
 //! (`Ev::PreloadFailed`), damit der Player nicht verfügbare Titel früh erkennt.
 //!
+//! Übergänge: Beim automatischen Wechsel blenden die Titel ineinander über ([`Transition::Cross`],
+//! der alte wird leiser und hält dann an, der neue wird lauter) – wie ein Radio, ohne Pause.
+//! Beim Springen von Hand kurz ([`Transition::Quick`]), damit es nicht knackt. Lautstärke =
+//! Grundlautstärke × Blendfaktor des Elements (iOS kennt keine Lautstärke im Element – dort
+//! wechselt es hart).
+//!
 //! iOS lässt ein Element nur nach einer Berührung spielen: Beim ersten Tippen werden darum
 //! alle Elemente mit einem stillen Ton "entsperrt". Scheitert ein Wechsel trotzdem
 //! (`NotAllowedError`), übernimmt das zuletzt spielende Element die Quelle.
@@ -56,6 +62,127 @@ struct Pool {
     /// Zuletzt gewünschte Vorlade-Einträge (werden nicht verdrängt)
     wanted: Vec<u64>,
     silence: Option<String>,
+}
+
+/// Wie ein Wechsel klingt.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Transition {
+    /// Hart (neu laden desselben Titels, Start ohne laufende Wiedergabe)
+    Cut,
+    /// Kurz ein- und ausblenden (Springen von Hand)
+    Quick,
+    /// Überblenden über so viele Sekunden (automatischer Wechsel am Ende)
+    Cross(f64),
+}
+
+/// Laufende Blende eines Elements.
+struct Fade {
+    slot: usize,
+    from: f64,
+    to: f64,
+    start: f64,
+    ms: f64,
+    /// Am Ende anhalten (ausblendender alter Titel)
+    pause_at_end: bool,
+}
+
+thread_local! {
+    /// Grundlautstärke (schon quadratisch) und Blendfaktor je Element
+    static BASE: std::cell::Cell<f64> = const { std::cell::Cell::new(0.64) };
+    static GAIN: RefCell<[f64; SLOTS]> = const { RefCell::new([1.0; SLOTS]) };
+    static FADES: RefCell<Vec<Fade>> = const { RefCell::new(Vec::new()) };
+    static FADER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Lässt sich die Lautstärke eines Elements setzen? (iOS ignoriert sie – dort würden beim
+/// Überblenden beide Titel voll laut laufen, also hart wechseln.)
+pub fn can_fade() -> bool {
+    thread_local! { static OK: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) }; }
+    OK.with(|ok| {
+        if let Some(v) = ok.get() {
+            return v;
+        }
+        let v = web_sys::HtmlAudioElement::new()
+            .map(|el| {
+                el.set_volume(0.5);
+                (el.volume() - 0.5).abs() < 0.01
+            })
+            .unwrap_or(false);
+        ok.set(Some(v));
+        v
+    })
+}
+
+fn apply_volume(i: usize, el: &web_sys::HtmlAudioElement) {
+    let g = GAIN.with(|g| g.borrow()[i]);
+    el.set_volume((BASE.with(|b| b.get()) * g).clamp(0.0, 1.0));
+}
+
+fn set_gain(i: usize, g: f64) {
+    GAIN.with(|x| x.borrow_mut()[i] = g.clamp(0.0, 1.0));
+    if let Some(el) = with(|p| p.slots[i].el.clone()) {
+        apply_volume(i, &el);
+    }
+}
+
+fn cancel_fade(i: usize) {
+    FADES.with(|f| f.borrow_mut().retain(|x| x.slot != i));
+}
+
+/// Element `i` in `ms` Millisekunden auf Faktor `to` blenden.
+fn fade(i: usize, to: f64, ms: f64, pause_at_end: bool) {
+    let from = GAIN.with(|g| g.borrow()[i]);
+    cancel_fade(i);
+    if ms <= 0.0 {
+        set_gain(i, to);
+        return;
+    }
+    FADES.with(|f| f.borrow_mut().push(Fade { slot: i, from, to, start: js_sys::Date::now(), ms, pause_at_end }));
+    if !FADER.with(|f| f.replace(true)) {
+        wasm_bindgen_futures::spawn_local(fader());
+    }
+}
+
+/// Führt die Blenden aus (alle 40 ms), solange es welche gibt.
+async fn fader() {
+    loop {
+        gloo_timers::future::TimeoutFuture::new(40).await;
+        let now = js_sys::Date::now();
+        let mut done: Vec<(usize, bool)> = Vec::new();
+        let steps: Vec<(usize, f64)> = FADES.with(|f| {
+            let f = f.borrow();
+            f.iter()
+                .map(|x| {
+                    let t = ((now - x.start) / x.ms).clamp(0.0, 1.0);
+                    // Gleichmässig für das Ohr: sanfter Anfang und sanftes Ende
+                    let e = t * t * (3.0 - 2.0 * t);
+                    if t >= 1.0 {
+                        done.push((x.slot, x.pause_at_end));
+                    }
+                    (x.slot, x.from + (x.to - x.from) * e)
+                })
+                .collect()
+        });
+        for (i, g) in steps {
+            set_gain(i, g);
+        }
+        if !done.is_empty() {
+            FADES.with(|f| f.borrow_mut().retain(|x| (now - x.start) / x.ms < 1.0));
+            for (i, pause) in done {
+                if pause {
+                    with(|p| {
+                        if p.active != i {
+                            let _ = p.slots[i].el.pause();
+                        }
+                    });
+                }
+            }
+        }
+        if FADES.with(|f| f.borrow().is_empty()) {
+            FADER.with(|f| f.set(false));
+            return;
+        }
+    }
 }
 
 thread_local! {
@@ -233,6 +360,8 @@ thread_local! {
 
 impl Pool {
     fn unload(&mut self, i: usize) {
+        FADES.with(|f| f.borrow_mut().retain(|x| x.slot != i));
+        GAIN.with(|g| g.borrow_mut()[i] = 1.0);
         let s = &mut self.slots[i];
         let _ = s.el.pause();
         if has_src(&s.el) {
@@ -320,8 +449,9 @@ fn fallback(i: usize) -> bool {
 }
 
 /// Eintrag `uid` abspielen. Liegt er schon (vor)geladen bereit, wird nur umgeschaltet.
-/// `fresh`: Quelle neu laden (Fehler, Hänger).
-pub fn load(uid: u64, url: &str, start: f64, autoplay: bool, fresh: bool) {
+/// `fresh`: Quelle neu laden (Fehler, Hänger). `transition`: wie der alte Titel aus- und der
+/// neue einblendet.
+pub fn load(uid: u64, url: &str, start: f64, autoplay: bool, fresh: bool, transition: Transition) {
     let r = with(|p| {
         let prev = p.active;
         let ready = (0..p.slots.len())
@@ -341,7 +471,16 @@ pub fn load(uid: u64, url: &str, start: f64, autoplay: bool, fresh: bool) {
             }
         };
         if idx != prev {
-            let _ = p.slots[prev].el.pause();
+            // Alter Titel: hart anhalten oder ausblenden (hält danach an)
+            let playing = !p.slots[prev].el.paused();
+            match transition {
+                Transition::Cross(secs) if playing && autoplay => fade_later(prev, secs * 1000.0),
+                Transition::Quick if playing && autoplay => fade_later(prev, 300.0),
+                _ => {
+                    let _ = p.slots[prev].el.pause();
+                    cancel_fade_later(prev);
+                }
+            }
             p.last = Some(prev);
             p.active = idx;
             if p.keep_prev.is_some_and(|(k, _)| k == idx) {
@@ -358,6 +497,29 @@ pub fn load(uid: u64, url: &str, start: f64, autoplay: bool, fresh: bool) {
         (idx, el, ready.is_some())
     });
     let Some((idx, el, was_ready)) = r else { return };
+    // Ausblenden des alten Titels (ausserhalb des Pool-Zugriffs)
+    for (i, ms) in PENDING_OUT.with(|p| std::mem::take(&mut *p.borrow_mut())) {
+        match ms {
+            Some(ms) => fade(i, 0.0, ms, true),
+            None => {
+                cancel_fade(i);
+                set_gain(i, 1.0);
+            }
+        }
+    }
+    // Neuer Titel: einblenden oder gleich voll
+    cancel_fade(idx);
+    match transition {
+        Transition::Cross(secs) if autoplay => {
+            set_gain(idx, 0.0);
+            fade(idx, 1.0, secs * 1000.0, false);
+        }
+        Transition::Quick if autoplay => {
+            set_gain(idx, 0.0);
+            fade(idx, 1.0, 400.0, false);
+        }
+        _ => set_gain(idx, 1.0),
+    }
     if was_ready {
         // Ereignisse dieses Elements kamen schon beim Vorladen
         let d = el.duration();
@@ -455,6 +617,29 @@ pub fn pause() {
     if let Some(el) = active_el() {
         let _ = el.pause();
     }
+    // Auch ein gerade ausblendender alter Titel hält an
+    let fading: Vec<usize> = FADES.with(|f| f.borrow().iter().filter(|x| x.pause_at_end).map(|x| x.slot).collect());
+    for i in fading {
+        cancel_fade(i);
+        with(|p| {
+            if p.active != i {
+                let _ = p.slots[i].el.pause();
+            }
+        });
+    }
+}
+
+thread_local! {
+    /// Während `load` vorgemerkte Blenden des alten Titels (`Some(ms)` = ausblenden, `None` = aus)
+    static PENDING_OUT: RefCell<Vec<(usize, Option<f64>)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn fade_later(i: usize, ms: f64) {
+    PENDING_OUT.with(|p| p.borrow_mut().push((i, Some(ms))));
+}
+
+fn cancel_fade_later(i: usize) {
+    PENDING_OUT.with(|p| p.borrow_mut().push((i, None)));
 }
 
 pub fn seek(secs: f64) {
@@ -477,10 +662,11 @@ pub fn stop() {
 
 pub fn set_volume(v: f64, muted: bool) {
     MUTED.with(|m| *m.borrow_mut() = muted);
+    // Gehörrichtiger: quadratisch
+    BASE.with(|b| b.set(v * v));
     with(|p| {
-        for s in &p.slots {
-            // Gehörrichtiger: quadratisch
-            s.el.set_volume(v * v);
+        for (i, s) in p.slots.iter().enumerate() {
+            apply_volume(i, &s.el);
             s.el.set_muted(muted);
         }
     });

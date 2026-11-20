@@ -1084,7 +1084,11 @@ fn handle(ev: Ev) {
         }
         Ev::AudioDuration(d) if active == Backend::Local => {
             if d.is_finite() && d > 0.0 {
-                *DURATION.write() = d;
+                // WebKit liest manche Tonspuren (fragmentierte MP4 von YouTube) viel zu lang und
+                // spielt nach dem echten Ende stumm weiter: dann gilt die bekannte Länge des
+                // Titels, und der Player wechselt dort zum nächsten (siehe `tick`)
+                let meta = current_peek().and_then(|t| t.duration_ms()).map(|ms| ms as f64 / 1000.0).unwrap_or(0.0);
+                *DURATION.write() = if meta > 20.0 && d > meta * 1.3 { meta } else { d };
             }
         }
         Ev::AudioPlaying if active == Backend::Local => {
@@ -1289,6 +1293,13 @@ async fn tick() {
             continue;
         }
         maybe_crossfade();
+        // Über die (echte) Länge hinaus: stummer Rest einer falsch gelesenen Datei – weiter
+        let (p, d) = (*POSITION.peek(), *DURATION.peek());
+        if d > 20.0 && p > d + 1.0 && CROSSED.with(|c| c.get()) != current_uid() {
+            CROSSED.with(|c| c.set(current_uid()));
+            on_ended();
+            continue;
+        }
         SESSION.with(|s| {
             if let Some(s) = s.borrow_mut().as_mut() {
                 s.heard += dt;

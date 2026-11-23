@@ -359,6 +359,13 @@ pub enum ServerEvent {
     SpotifyChanged,
     /// Fortschritt einer Spotify-Aufgabe (Abgleich, Import, "alle herunterladen")
     SpotifyProgress { task: String, done: u64, total: u64 },
+    /// Was das Konto gerade hört (anderes Gerät, Sync) – nur an dieses Konto. `takeover`:
+    /// ein Gerät hat mit „Hier weiterhören“ übernommen, die anderen pausieren.
+    NowPlaying {
+        now: Option<NowPlaying>,
+        #[serde(default)]
+        takeover: bool,
+    },
 }
 
 /// Fehlerantwort jeder Route: `{"error": "…"}` mit passendem HTTP-Status.
@@ -684,6 +691,108 @@ pub struct SpImportRequest {
     /// Alle Treffer mit yt-dlp in den Musikordner laden
     #[serde(default)]
     pub download: bool,
+}
+
+// ---------------------------------------------------------------- Jetzt läuft (Sync, Widget)
+
+/// Art des Geräts – fürs Symbol: `computer`, `phone`, `tablet`, `browser`.
+pub const DEVICE_KINDS: &[&str] = &["computer", "phone", "tablet", "browser"];
+
+/// `GET/PUT /api/v1/presence` – vom Konto eingeschaltet, sonst geht nichts.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct PresenceSettings {
+    /// Geräte melden, was sie spielen; alle anderen Geräte sehen es („Hört auf …“)
+    pub enabled: bool,
+    /// Öffentliches Widget, JSON-API und MCP über die geheime Adresse (braucht `enabled`)
+    pub public: bool,
+    /// Pfade mit dem geheimen Token – nur gesetzt, wenn `public`
+    #[serde(default)]
+    pub widget_path: Option<String>,
+    #[serde(default)]
+    pub api_path: Option<String>,
+    #[serde(default)]
+    pub mcp_path: Option<String>,
+}
+
+/// `PUT /api/v1/presence`
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct PresenceUpdate {
+    pub enabled: bool,
+    #[serde(default)]
+    pub public: bool,
+}
+
+/// `POST /api/v1/now-playing` – ein Gerät meldet seinen Stand (bei jeder Änderung und
+/// alle paar Sekunden, solange es spielt).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct NowPlayingReport {
+    /// Zufällige ID des Geräts (bleibt im Browser gespeichert)
+    pub device_id: String,
+    /// "MacBook", "iPhone", "Chrome auf Windows" …
+    pub device_name: String,
+    #[serde(default)]
+    pub device_kind: String,
+    /// `None` = nichts mehr geladen
+    pub track: Option<PlayableTrack>,
+    pub position_ms: u64,
+    #[serde(default)]
+    pub duration_ms: u64,
+    pub playing: bool,
+    /// „Hier weiterhören“: die anderen Geräte sollen pausieren
+    #[serde(default)]
+    pub takeover: bool,
+}
+
+/// Letzter Stand des Kontos (`GET /api/v1/now-playing`, Ereignis `now_playing`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct NowPlaying {
+    pub device_id: String,
+    pub device_name: String,
+    #[serde(default)]
+    pub device_kind: String,
+    pub track: PlayableTrack,
+    /// Position zum Zeitpunkt `updated_at`
+    pub position_ms: u64,
+    pub duration_ms: u64,
+    pub playing: bool,
+    /// Unix-Millisekunden der Meldung
+    pub updated_at: i64,
+}
+
+impl NowPlaying {
+    /// Position jetzt (`now_ms`): spielt das Gerät, läuft sie seit der Meldung weiter.
+    pub fn position_at(&self, now_ms: i64) -> u64 {
+        let mut p = self.position_ms;
+        if self.playing {
+            p += (now_ms - self.updated_at).max(0) as u64;
+        }
+        if self.duration_ms > 0 { p.min(self.duration_ms) } else { p }
+    }
+}
+
+/// `GET /api/v1/public/now-playing/<token>` – fürs Widget, ohne Anmeldung.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct PublicNowPlaying {
+    /// Gibt es überhaupt etwas zu zeigen (in den letzten Stunden etwas gehört)?
+    pub active: bool,
+    pub playing: bool,
+    /// Anzeigename des Kontos
+    pub user: String,
+    pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
+    /// Absolute Bildadresse (Cover)
+    pub artwork: Option<String>,
+    /// Link zum Titel (YouTube Music) – fehlt bei lokalen Dateien
+    pub link: Option<String>,
+    /// Position jetzt (bereits hochgerechnet) und Länge, Millisekunden
+    pub position_ms: u64,
+    pub duration_ms: u64,
+    pub device_name: String,
+    pub device_kind: String,
+    /// Unix-Millisekunden der letzten Meldung und der Antwort
+    pub updated_at: i64,
+    pub server_time: i64,
 }
 
 #[cfg(test)]

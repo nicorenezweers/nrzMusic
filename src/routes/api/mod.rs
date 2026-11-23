@@ -8,6 +8,7 @@ mod feed;
 mod library;
 pub mod media;
 mod playlists;
+pub mod presence;
 mod settings;
 mod shares;
 mod spotify;
@@ -34,6 +35,7 @@ pub fn routes() -> Vec<Route> {
     r.extend(library::routes());
     r.extend(media::routes());
     r.extend(playlists::routes());
+    r.extend(presence::routes());
     r.extend(settings::routes());
     r.extend(shares::routes());
     r.extend(spotify::routes());

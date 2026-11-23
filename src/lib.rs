@@ -102,6 +102,7 @@ pub async fn build_with_services(
         .attach(fairings::CloseDatabase)
         .mount("/", routes::assets::routes())
         .mount("/", routes::spa::routes())
+        .mount("/", routes::widget::routes())
         .mount("/api/v1", routes::api::routes())
         .register("/", routes::catchers::all()))
 }

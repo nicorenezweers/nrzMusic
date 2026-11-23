@@ -2293,7 +2293,7 @@ dependencies = [
 
 [[package]]
 name = "nrzmusic"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "argon2",
  "bytes",
@@ -2325,7 +2325,7 @@ dependencies = [
 
 [[package]]
 name = "nrzmusic-macos"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "futures",
  "hex",
@@ -2351,7 +2351,7 @@ dependencies = [
 
 [[package]]
 name = "nrzmusic-spotify"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "base64 0.22.1",
  "hmac",
@@ -2370,14 +2370,14 @@ dependencies = [
 
 [[package]]
 name = "nrzmusic-types"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "nrzmusic-ytmusic"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "nrzmusic-types",
  "reqwest",

@@ -63,6 +63,7 @@ nrzMusic is one Rust program. It serves the JSON API, the web interface (a Dioxu
 | Android | WebView loads the server; `NrzAndroid` bridge only answers on pages of the configured server; downloads with the WebView's cookie only to that server; offline playback natively (ExoPlayer in a `MediaSessionService`), web playback kept alive by a foreground service with a platform `MediaSession` | The UI stays one codebase; offline needs native storage and playback |
 | Feed & stats | Every finished playback is reported (`POST /listens`: listened time, skipped, completed; `sendBeacon` on page close) into `listens`; `src/feed.rs` builds a taste profile (time-decayed listens, favorites, dislikes, old history) and mixes candidates from YouTube Music radio, artists' top songs, rediscovered favorites, the library and charts, scored with noise and an exploration share; the player refills its queue from `/feed` in feed mode and at the end of any queue; `/stats` aggregates `listens` in SQL | Learns from behaviour without an account at YouTube; recommendations stay on the server, only YouTube Music and (for genres) the iTunes search are asked |
 | Sharing | `shares` (random 16-byte token per account/kind/target, unique, live content); the Gate lets `GET /api/v1/public/*` and `/api/v1/covers/*` through; `/public/share/<token>/stream/<key>` only streams tracks that belong to that link; `/s/<token>` serves index.html with Open Graph tags; the UI shows a standalone page with a small player when nobody is logged in | Share without accounts on the other side, without exposing the rest of the library |
+| Now playing | `presence` (one row per account: `enabled`, `public`, random 16-byte `token`, last state as JSON, ms timestamp). Each device reports changes and a heartbeat every 10 s while playing (`POST /now-playing`, `sendBeacon` as paused on page close); a paused report never replaces another device that is playing; a playing device silent for 45 s counts as paused. All devices of the account get `now_playing` events; the UI shows "Hört auf <Gerät>" with the position extrapolated to the second and "Hier weiterhören" (plays there from that position, the other device pauses via `takeover`). With `public`, `/widget/<token>` (self-contained page, own CSP with `frame-ancestors *`), `GET /api/v1/public/now-playing/<token>` (CORS open) and `POST /mcp/<token>` (MCP Streamable HTTP, tool `now_playing`) show the state without login | Spotify-Connect-like hand-off between own devices; a widget URL you can paste anywhere, opt-in and revocable by rotating the token |
 | Preloading | UI: a pool of four `<audio>` elements (active, next fully once the current has played 4 s, next-but-one metadata only, previous kept 8–30 s by back-probability), unlocked with a silent blob on the first touch (iOS), falling back to the last playing element on `NotAllowedError`; server: permanent yt-dlp errors (deleted, private, blocked, age gate) answer 410 and are remembered for an hour, the UI replaces such tracks with another version (same base title and artist) or drops them | Gapless-feeling skips without decoding work or downloading whole queues |
 | i18n | German source strings as keys, catalogs in `ui/locales/<lang>.json` (de, en) | Readable code |
 
@@ -209,6 +210,21 @@ Admin only: `PUT /settings`, `POST /upload`, `POST /library/rescan`, `POST /down
 | `GET /spotify/public/<id>` | → `SpPlaylist` from the public embed page (no Spotify login, at most 100 tracks) |
 | `POST /spotify/import` | `SpImportRequest` (`source`: `liked`, `all` or a playlist ID/link) → `202`, progress as `SpotifyProgress` events (`match`, `import_all`, `import`/`import_failed`); importing the same source again updates its playlist |
 
+### Now playing (sync, widget, MCP)
+
+Opt-in per account; off → reports answer `403`, public addresses `404`.
+
+| Method & path | Body → Response |
+|---|---|
+| `GET /presence` | → `PresenceSettings` (`enabled`, `public`, `widget_path`/`api_path`/`mcp_path` while public) |
+| `PUT /presence` | `PresenceUpdate` → `PresenceSettings`; switching off forgets the last state |
+| `POST /presence/rotate` | → `PresenceSettings` with a new secret token (old addresses stop working) |
+| `POST /now-playing` | `NowPlayingReport` → `204`; event `now_playing` to all devices of the account |
+| `GET /now-playing` | → `NowPlaying` or `null` (position recalculated to now) |
+| `GET /public/now-playing/<token>` | no login, CORS `*` → `PublicNowPlaying` (title, artist, album, absolute cover URL, position/length in ms, playing, device) |
+| `GET /widget/<token>` | (outside `/api`) embeddable HTML card; `?theme=light\|auto`, `?compact=1`, `?lang=en` |
+| `POST /mcp/<token>` | (outside `/api`) MCP JSON-RPC: `initialize`, `ping`, `tools/list`, `tools/call` `now_playing` (text + `structuredContent`) |
+
 ### Settings
 
 | Method & path | Body → Response |
@@ -225,5 +241,5 @@ Everything outside `/api/` and `/static/` returns the embedded web interface (`i
 - Spotify: PKCE without a client secret, `state` checked and bound to the account that started the login, tokens only in the database and never sent to the browser; only read scopes.
 - yt-dlp runs as a child process with an argument list (no shell); only video IDs from YouTube Music reach it.
 - Uploads: only audio extensions, path components sanitized (no `..`, no absolute paths, no hidden files), never overwrites an existing file.
-- CSP: scripts only from the server, no frames (`frame-src 'none'`), media only from the server, images from the server and YouTube's/Spotify's image hosts, `frame-ancestors 'self'`.
+- CSP: scripts only from the server, frames only from the server itself (`frame-src 'self'`, for the widget preview), media only from the server, images from the server and YouTube's/Spotify's image hosts, `frame-ancestors 'self'` – except `/widget/<token>`, which may be embedded anywhere and only reads the public now-playing JSON.
 - `yt/stream` only accepts 11-character video IDs and only fetches `https://` URLs that yt-dlp returned.

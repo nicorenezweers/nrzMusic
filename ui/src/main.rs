@@ -13,6 +13,7 @@ mod i18n;
 mod mac;
 mod pages;
 mod player;
+mod presence;
 mod share;
 mod spotify;
 mod state;
@@ -149,6 +150,7 @@ fn Main() -> Element {
         android::init();
         spawn_forever(player::run());
         spawn_forever(events::run());
+        spawn_forever(presence::run());
         spawn_forever(async {
             futures_util::future::join4(state::load_status(), state::load_playlists(), state::load_favorites(), state::load_prefs()).await;
         });

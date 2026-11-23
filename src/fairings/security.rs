@@ -16,7 +16,7 @@ pub const CSP: &str = "default-src 'self'; \
     font-src 'self'; \
     img-src 'self' data: blob: https://*.ytimg.com https://*.googleusercontent.com https://*.ggpht.com https://*.scdn.co https://*.spotifycdn.com; \
     media-src 'self' blob:; \
-    frame-src 'none'; \
+    frame-src 'self'; \
     worker-src 'self' blob:; \
     connect-src 'self'; \
     object-src 'none'; \

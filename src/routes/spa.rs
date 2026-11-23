@@ -184,7 +184,7 @@ fn fallback(path: PathBuf, gzip: AcceptsGzip) -> Option<Reply> {
     Some(page())
 }
 
-fn escape(s: &str) -> String {
+pub fn escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
@@ -201,6 +201,19 @@ impl<'r> FromRequest<'r> for HostHeader {
     }
 }
 
+impl HostHeader {
+    /// Adresse des Servers ohne `/` am Ende: `public_url`, sonst aus der Anfrage.
+    pub fn base(&self, config: &crate::config::Config) -> String {
+        if !config.public_url.trim().is_empty() {
+            return config.public_url.trim().trim_end_matches('/').to_string();
+        }
+        match &self.0 {
+            Some(h) => format!("{}://{h}", if self.1 { "https" } else { "http" }),
+            None => String::new(),
+        }
+    }
+}
+
 /// Geteilter Link: dieselbe App, aber mit Titel und Cover für die Vorschau in Messengern
 /// (Open Graph). Unbekannte Links bekommen die normale Seite – die App zeigt den Fehler.
 #[get("/s/<token>")]
@@ -212,14 +225,7 @@ async fn shared(
 ) -> Reply {
     let Some(html) = page_html() else { return Reply::Missing };
     let Ok(view) = crate::db::shares::view(pool, token, false).await else { return page() };
-    let base = if !config.public_url.trim().is_empty() {
-        config.public_url.trim().trim_end_matches('/').to_string()
-    } else {
-        match &host.0 {
-            Some(h) => format!("{}://{h}", if host.1 { "https" } else { "http" }),
-            None => String::new(),
-        }
-    };
+    let base = host.base(config);
     let title = match view.kind {
         nrzmusic_types::ShareKind::Favorites => format!("Likes von {}", view.owner),
         _ if view.title.is_empty() => "nrzMusic".to_string(),

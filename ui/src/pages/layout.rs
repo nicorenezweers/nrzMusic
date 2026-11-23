@@ -88,9 +88,11 @@ pub fn Layout() -> Element {
                     }
                 }
             }
+            div { class: "hidden md:block", crate::presence::RemoteBar {} }
             PlayerBar {}
             // Handy: schwebendes Dock mit Mini-Player und Navigation (Inhalt läuft darunter durch)
             div { class: "m-dock md:hidden",
+                crate::presence::RemoteBar {}
                 MiniPlayer {}
                 BottomNav {}
             }

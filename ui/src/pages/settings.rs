@@ -223,6 +223,10 @@ pub fn SettingsPage() -> Element {
                 PrefsForm {}
             }
 
+            Section { title: tr("Jetzt läuft"), description: tr("Deine Geräte zeigen, was gerade auf einem anderen läuft – auf die Sekunde – und du kannst dort weiterhören. Auf Wunsch auch als Widget zum Einbetten, als JSON-API und als MCP-Server. Gilt für dein Konto."),
+                PresenceForm {}
+            }
+
             Section { title: tr("Geteilte Links"), description: tr("Links zu Titeln, deinen Likes und Playlists. Wer einen Link hat, kann die Titel ohne Konto anhören."),
                 SharesList {}
             }
@@ -426,6 +430,90 @@ fn PrefsForm() -> Element {
                     {tr("Tippst du bei einem YouTube-Titel aufs Herz, landet er gleich unter „Downloads“ und im Musikordner.")}
                 } else {
                     {tr("Downloads sind auf dem Server ausgeschaltet oder yt-dlp fehlt.")}
+                }
+            }
+        }
+    }
+}
+
+/// Jetzt läuft: Sync an/aus, Name dieses Geräts, öffentliche Adressen (Widget, JSON, MCP).
+#[component]
+fn PresenceForm() -> Element {
+    let mut busy = use_signal(|| false);
+    let mut name = use_signal(crate::presence::device_name);
+    let settings = crate::presence::SETTINGS();
+    let Some(s) = settings else { return rsx! { Loading {} } };
+    let set = move |enabled: bool, public: bool| {
+        let mut busy = busy;
+        busy.set(true);
+        spawn(async move {
+            if let Err(e) = crate::presence::update(enabled, public).await {
+                toast_error(e);
+            }
+            busy.set(false);
+        });
+    };
+    let widget = s.widget_path.as_deref().map(crate::share::full_url);
+    let api_url = s.api_path.as_deref().map(crate::share::full_url);
+    let mcp = s.mcp_path.as_deref().map(crate::share::full_url);
+    let public = s.public;
+    let enabled = s.enabled;
+    rsx! {
+        div { class: "grid gap-4",
+            div { class: "grid gap-2",
+                Toggle { checked: enabled, disabled: busy(), label: tr("Zwischen meinen Geräten synchronisieren („Hört auf …“)"),
+                    onchange: move |on: bool| set(on, public && on),
+                }
+                p { class: "text-xs text-muted-foreground", {tr("Jedes Gerät meldet dem Server, was es spielt. Läuft auf einem anderen Gerät etwas, steht es unten über dem Player.")} }
+            }
+            if enabled {
+                Field { label: tr("Name dieses Geräts"), hint: tr("So erscheint es auf deinen anderen Geräten und im Widget. Leer = automatisch."),
+                    div { class: "flex items-center gap-2",
+                        crate::presence::DeviceIcon { kind: crate::presence::device_kind().to_string(), class: "size-4 shrink-0 text-muted-foreground" }
+                        input { class: "{INPUT}", maxlength: "60", placeholder: "{crate::presence::auto_name()}", value: "{name}",
+                            oninput: move |e| name.set(e.value()),
+                            onchange: move |e| { crate::presence::set_device_name(&e.value()); crate::presence::force_report(); },
+                        }
+                    }
+                }
+                div { class: "grid gap-2",
+                    Toggle { checked: public, disabled: busy(), label: tr("Öffentlich: Widget, JSON-API und MCP"),
+                        onchange: move |on: bool| set(true, on),
+                    }
+                    p { class: "text-xs text-muted-foreground", {tr("Wer die geheime Adresse kennt, sieht ohne Anmeldung, was du gerade hörst – nur das, nichts sonst.")} }
+                }
+            }
+            if let (Some(w), Some(a), Some(m)) = (widget, api_url, mcp) {
+                div { class: "grid gap-3 rounded-lg border p-3",
+                    iframe { class: "h-[150px] w-full max-w-[460px] rounded-xl", src: "{w}", title: tr("Vorschau des Widgets"), style: "border: 0; background: transparent" }
+                    Field { label: tr("Widget-Adresse"), hint: tr("Einfach kopieren und einfügen – z. B. in Notion, OBS (Browser-Quelle), eine Homepage oder ein Dashboard. Optionen: ?theme=light, ?compact=1, ?lang=en"),
+                        CopyField { value: w.clone() }
+                    }
+                    Field { label: tr("Zum Einbetten (HTML)"),
+                        CopyField { value: format!("<iframe src=\"{w}\" width=\"460\" height=\"170\" style=\"border:0\" allowtransparency=\"true\" title=\"nrzMusic\"></iframe>") }
+                    }
+                    Field { label: tr("JSON-API"), hint: tr("Titel, Künstler, Cover, Stelle, Länge und Gerät – für eigene Widgets (CORS offen)."),
+                        CopyField { value: a }
+                    }
+                    Field { label: tr("MCP-Server"), hint: tr("Streamable HTTP mit dem Werkzeug „now_playing“ – z. B. in Claude als eigenen Connector hinzufügen."),
+                        CopyField { value: m }
+                    }
+                    div {
+                        button { class: "{btn(BTN_OUTLINE)} {BTN_SM}", disabled: busy(),
+                            onclick: move |_| {
+                                busy.set(true);
+                                spawn(async move {
+                                    match crate::presence::rotate().await {
+                                        Ok(()) => toast(tr("Neue Adresse – die alte funktioniert nicht mehr.")),
+                                        Err(e) => toast_error(e),
+                                    }
+                                    busy.set(false);
+                                });
+                            },
+                            icons::RefreshCw { class: "size-4" }
+                            {tr("Neue geheime Adresse")}
+                        }
+                    }
                 }
             }
         }

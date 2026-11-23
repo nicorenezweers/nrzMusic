@@ -81,6 +81,7 @@ pub async fn run() {
                     state::load_favorites().await;
                     crate::downloads::load().await;
                     crate::spotify::load_status().await;
+                    crate::presence::load().await;
                 }
                 first = false;
                 state::load_status().await;
@@ -134,5 +135,6 @@ async fn handle(ev: ServerEvent) {
         ServerEvent::DownloadUpdate(job) => crate::downloads::on_update(*job),
         ServerEvent::SpotifyChanged => crate::spotify::load_status().await,
         ServerEvent::SpotifyProgress { task, done, total } => crate::spotify::on_progress(task, done, total),
+        ServerEvent::NowPlaying { now, takeover } => crate::presence::on_event(now, takeover),
     }
 }

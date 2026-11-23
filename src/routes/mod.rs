@@ -6,3 +6,4 @@ pub mod api;
 pub mod assets;
 pub mod catchers;
 pub mod spa;
+pub mod widget;

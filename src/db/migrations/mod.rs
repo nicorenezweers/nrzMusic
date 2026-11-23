@@ -16,6 +16,7 @@ mod m0002_downloads_spotify;
 mod m0003_accounts;
 mod m0004_feed_stats;
 mod m0005_shares;
+mod m0006_presence;
 
 /// Version, Beschreibung (wie sqlx sie aus dem alten Dateinamen bildete) und SQL.
 const MIGRATIONS: &[(i64, &str, &str)] = &[
@@ -24,6 +25,7 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
     (3, "accounts", m0003_accounts::SQL),
     (4, "feed stats", m0004_feed_stats::SQL),
     (5, "shares", m0005_shares::SQL),
+    (6, "presence", m0006_presence::SQL),
 ];
 
 /// Alle Migrationen, bereit für [`Migrator::run`].
@@ -55,6 +57,7 @@ mod tests {
         (3, "37f78a9b876d207944f7e127c9ffeb922fe6e67ca44212a3e7e163f861931e29a43e7d153a0aaa46a6c09fa6e8921404"),
         (4, "98d9709e9320cd813a5905d50bd0c98014374c720fbfc3dcabdba6f295a940d06cfeef4921aa642a71f0bc2942bd5807"),
         (5, "e94a9e11233496a0917e52e931aa2bf5de7d5445ce232d0b6ad7502f7c962efcc0624586dc4560387f882eefa2042d1e"),
+        (6, "e711fe2e0fedc6878406ccf8dd51ec2418e68afd47d9473d52150d25178a77a0e10372b70893076b17ae7263591b46a3"),
     ];
 
     #[test]

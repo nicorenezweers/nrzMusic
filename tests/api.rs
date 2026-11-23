@@ -428,7 +428,7 @@ async fn spa_static_and_errors() {
         assert!(matches!(res.status().code, 200 | 503), "{uri}");
         assert_eq!(res.content_type(), Some(rocket::http::ContentType::HTML));
         let csp = res.headers().get_one("Content-Security-Policy").unwrap();
-        assert!(csp.contains("frame-src 'none'"));
+        assert!(csp.contains("frame-src 'self';"), "nur eigene Frames (Widget-Vorschau)");
         assert!(csp.contains("script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval';"));
         assert!(!csp.contains("www.youtube.com"));
         assert!(csp.contains("https://*.ytimg.com"));

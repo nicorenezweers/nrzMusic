@@ -1,6 +1,6 @@
 [package]
 name = "nrzmusic-types"
-version = "1.5.1"
+version = "1.6.0"
 edition = "2021"
 description = "nrzMusic – gemeinsame Typen der JSON-API (Server, Oberfläche, YouTube-Music-Client)"
 license = "AGPL-3.0-or-later"

@@ -251,6 +251,11 @@ pub fn current_key() -> Option<String> {
 
 /// Liste ersetzen und ab `start` spielen. Bei Zufall bleibt der gewählte Titel vorne.
 pub fn play_now(tracks: Vec<PlayableTrack>, start: usize) {
+    play_now_at(tracks, start, 0.0);
+}
+
+/// Wie [`play_now`], aber ab `secs` Sekunden (z. B. „Hier weiterhören“ von einem anderen Gerät).
+pub fn play_now_at(tracks: Vec<PlayableTrack>, start: usize, secs: f64) {
     if tracks.is_empty() {
         return;
     }
@@ -269,7 +274,7 @@ pub fn play_now(tracks: Vec<PlayableTrack>, start: usize) {
         *QUEUE.write() = q;
         *INDEX.write() = Some(start);
     }
-    load_current(true, 0.0);
+    load_current(true, secs.max(0.0));
 }
 
 /// Feed ab `start` spielen: der Feed füllt die Warteschlange danach endlos nach.

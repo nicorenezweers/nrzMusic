@@ -9,6 +9,7 @@ pub mod library;
 mod migrations;
 pub mod playable;
 pub mod playlists;
+pub mod presence;
 pub mod settings;
 pub mod shares;
 pub mod spotify;
